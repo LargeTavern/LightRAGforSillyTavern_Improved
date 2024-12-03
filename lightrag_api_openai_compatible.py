@@ -29,7 +29,7 @@ app = FastAPI(title="LightRAG API", description="API for RAG operations")
 load_dotenv()
 
 API_port = os.getenv("API_port")
-
+print(f"API_port: {API_port}")
 
 # Configure working directory
 WORKING_DIR = os.getenv("RAG_DIR")
@@ -467,7 +467,7 @@ if __name__ == "__main__":
     #test_funcs()
     #asyncio.run(test_funcs())
 
-    uvicorn.run(app, host="0.0.0.0", port=API_port)
+    uvicorn.run(app, host="0.0.0.0", port=int(API_port))
 
 # Usage example
 # To run the server, use the following command in your terminal:
