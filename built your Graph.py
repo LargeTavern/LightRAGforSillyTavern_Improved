@@ -5,7 +5,8 @@ import numpy as np
 from dotenv import load_dotenv
 
 from lightrag import LightRAG, QueryParam
-from lightrag.llm import openai_complete_if_cache, openai_embedding
+from lightrag.llm import openai_complete_if_cache, openai_embedding, openai_compatible_complete_if_cache, \
+    openai_compatible_embedding
 from lightrag.utils import EmbeddingFunc
 
 load_dotenv()
@@ -35,7 +36,7 @@ if not os.path.exists(WORKING_DIR):
 async def llm_model_func(
     prompt, system_prompt=None, history_messages=[], **kwargs
 ) -> str:
-    return await openai_complete_if_cache(
+    return await openai_compatible_complete_if_cache(
         LLM_MODEL,
         prompt,
         system_prompt=system_prompt,
@@ -47,7 +48,7 @@ async def llm_model_func(
 
 
 async def embedding_func(texts: list[str]) -> np.ndarray:
-    return await openai_embedding(
+    return await openai_compatible_embedding(
         texts,
         model=EMBEDDING_MODEL,
         api_key=API_KEY,
