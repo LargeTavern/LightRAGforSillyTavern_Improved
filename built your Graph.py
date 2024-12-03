@@ -90,7 +90,7 @@ async def main():
         )
 
 
-        with open("text/斗破前十章.txt", "r", encoding="utf-8", errors='ignore') as f:
+        with open("text/book.txt", "r", encoding="utf-8", errors='ignore') as f:
             await rag.ainsert(f.read())
 
         '''
