@@ -1,4 +1,3 @@
-
 import os
 import secrets
 import time
@@ -169,6 +168,7 @@ def process_messages(
     user_message: str,
     system_prompt: Optional[str],
     history_messages: list[dict],
+    prefill: Optional[str],
     strategy: str = "full_context",
 ) -> str:
     """
@@ -178,6 +178,7 @@ def process_messages(
         user_message (str): 当前用户消息。
         system_prompt (Optional[str]): 系统提示。
         history_messages (list[dict]): 多轮对话历史记录。
+        prefill (Optional[str]): 预填充的消息。
         strategy (str): 消息处理策略，默认为 "full_context"。
 
     Returns:
@@ -194,7 +195,10 @@ def process_messages(
             f"{msg['role'].capitalize()}: {msg['content']}"
             for msg in recent_messages
         )
-        return f"{full_context}\nUser: {user_message}"
+        message = f"{full_context}\nUser: {user_message}"
+        if prefill:
+            message += f"\nAssistant: {prefill}"
+        return message
 
     elif strategy == "full_context":
         # 完整上下文处理
@@ -202,7 +206,10 @@ def process_messages(
             f"{msg['role'].capitalize()}: {msg['content']}"
             for msg in history_messages
         )
-        return f"System: {system_prompt}\n{full_context}\nUser: {user_message}" if system_prompt else f"{full_context}\nUser: {user_message}"
+        message = f"System: {system_prompt}\n{full_context}\nUser: {user_message}" if system_prompt else f"{full_context}\nUser: {user_message}"
+        if prefill:
+            message += f"\nAssistant: {prefill}"
+        return message
 
     else:
         raise ValueError(f"Unknown strategy: {strategy}")
@@ -244,13 +251,14 @@ async def chat_completions_endpoint(request: ChatRequest):
         else:
             llm_model = request.model
 
-        # 全局变量更新
         global LLM_MODEL
-        LLM_MODEL  = llm_model
-
 
         # Extract user query from messages
-        user_message = [msg.content for msg in request.messages if msg.role == "user"]
+        user_message = []
+        for msg in reversed(request.messages):
+            if msg.role == "user":
+                user_message = [msg.content]
+                break
 
         # 添加字符串以绕过hash碰撞
         appended_message = append_random_hex_to_list(user_message,8)
@@ -260,25 +268,58 @@ async def chat_completions_endpoint(request: ChatRequest):
             raise HTTPException(status_code=400, detail="No user message found.")
 
 
-        # Extract system prompt and history messages
-        system_prompts = [
-            msg.content for msg in request.messages if msg.role == "system"
-        ]
+        # Extract system prompt from messages before first user/assistant message
+        system_prompts = []
+        for msg in request.messages:
+            if msg.role == "system" and not any(m.role in ["user", "assistant"] for m in request.messages[:request.messages.index(msg)]):
+                system_prompts.append(msg.content)
+            elif msg.role in ["user", "assistant"]:
+                break
         system_prompt = "\n".join(system_prompts)
 
+        # Get history messages starting after initial system messages
+        history_messages = []
+        start_processing = False
+        for i, msg in enumerate(request.messages):  # Process all messages
+            # Skip initial system messages until we find first user/assistant message
+            if not start_processing and msg.role in ['user', 'assistant']:
+                start_processing = True
+                
+            if start_processing:
+                # Skip if it's the last message and it's a user message
+                if i == len(request.messages) - 1 and msg.role == 'user':
+                    continue
+                # Skip if it's the last user message followed by an assistant message (which would be prefill)
+                if msg.role == 'user' and i < len(request.messages) - 1 and request.messages[i + 1].role == 'assistant' and i + 1 == len(request.messages) - 1:
+                    continue
+                
+                history_messages.append({
+                    "role": msg.role,
+                    "content": msg.content
+                })
 
-        history_messages = [
-            {"role": msg.role, "content": msg.content}
-            for msg in request.messages
-            if msg.role in ["user", "assistant"]
-        ]
+        # Check if last message is from assistant (prefill)
+        prefill = None
+        if history_messages and history_messages[-1]["role"] == "assistant":
+            prefill = history_messages[-1]["content"]
+            # Remove the prefill from history
+            history_messages = history_messages[:-1]
 
         processed_message = process_messages(
             user_message=user_messages,
             system_prompt=system_prompt,
             history_messages=history_messages,
+            prefill=prefill,
             strategy="full_context",  # 默认使用完整上下文策略
         )
+
+        # Store the original LLM_MODEL
+        original_llm_model = LLM_MODEL
+
+        async def update_llm_model():
+            await asyncio.sleep(3)
+            global LLM_MODEL
+            LLM_MODEL = llm_model
 
         # Simulate RAG query result（不再使用）
         async def simulate_rag_query(query, system_prompt, history):
@@ -294,11 +335,25 @@ async def chat_completions_endpoint(request: ChatRequest):
 
         # Stream generator
         async def stream_generator():
+            # Start the task to update LLM_MODEL after 1 second
+            update_task = asyncio.create_task(update_llm_model())
+
+            # Perform the rag.query operation
             result = rag.query(
                 processed_message,
                 param=QueryParam(mode="local", only_need_context=False),
                 system_prompt_from_frontend=system_prompt,  # 添加 system_prompt
-            )
+                )
+
+            # Ensure that LLM_MODEL is reverted back after rag.query completes
+            if not update_task.done():
+                update_task.cancel()
+                try:
+                    await update_task
+                except asyncio.CancelledError:
+                    pass
+            LLM_MODEL = original_llm_model
+            
             content_chunks = result.split()
             for chunk in content_chunks:
                 yield f'data: {{"id": "chunk", "object": "chat.completion.chunk", "choices": [{{"index": 0, "delta": {{"content": "{chunk}"}}}}]}}\n\n'
@@ -310,11 +365,25 @@ async def chat_completions_endpoint(request: ChatRequest):
         if request.stream:
             return StreamingResponse(stream_generator(), media_type="text/event-stream")
         else:
+            # Start the task to update LLM_MODEL after 1 second
+            update_task = asyncio.create_task(update_llm_model())
+
+            # Perform the rag.query operation
             result = rag.query(
                 processed_message,
                 param=QueryParam(mode="local", only_need_context=False),
                 system_prompt_from_frontend=system_prompt,  # 添加 system_prompt
-            )
+                )
+                
+            # Ensure that LLM_MODEL is reverted back after rag.query completes
+            if not update_task.done():
+                update_task.cancel()
+                try:
+                    await update_task
+                except asyncio.CancelledError:
+                    pass
+            LLM_MODEL = original_llm_model
+            
             created_time = int(time.time())
             """
             print("\n\n\n")
