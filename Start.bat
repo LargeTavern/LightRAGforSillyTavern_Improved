@@ -1,18 +1,17 @@
 @echo off
-chcp 65001 > nul
-REM 配置 conda
+REM Setup conda
 call conda activate lightrag
 
-REM 启动知识图谱
-echo [信息] 启动知识图谱服务...
-python ".\src\api\api.py"
+REM Building the Knowledge Graph
+echo [Info] Running service...
+python ".\lightrag_api_openai_compatible.py"
 if errorlevel 1 (
-    echo [错误] 启动服务失败，请查看抛出的错误并进行排查，或者联系管理员。
+    echo [Error] Failed to run the service, please check the error thrown and troubleshoot, or check the network connection.
     pause
     exit /b
 )
 
-REM 显示成功信息
-echo [成功] 服务启动成功，可以开始连接使用。
-echo [提示] 服务的端口为，请查看文档获取详细的URL。
+REM Echo completion
+echo [Success] Ran successfully, you can start connecting to SillyTavern!
+echo [Hint] Your API port is shown below, check out the tutorial to put that URL in SillyTavern!
 pause
