@@ -91,7 +91,7 @@ async def main():
         )
 
 
-        with open("text/book.txt", "r", encoding="utf-8", errors='ignore') as f:
+        with open(file_DIR, "r", encoding="utf-8", errors='ignore') as f:
             await rag.ainsert(f.read())
 
         '''
@@ -99,21 +99,21 @@ async def main():
         # Perform naive search
         print(
             await rag.aquery(
-                "What kind of story is told in this first chapter? Please answer in Chinese.", param=QueryParam(mode="naive")
+                "What is the information being told here?", param=QueryParam(mode="naive")
             )
         )
 
         # Perform local search
         print(
             await rag.aquery(
-                "What kind of story is told in this first chapter? Please answer in Chinese.", param=QueryParam(mode="local")
+                "What is the information being told here?", param=QueryParam(mode="local")
             )
         )
 
         # Perform global search
         print(
             await rag.aquery(
-                "What kind of story is told in this first chapter? Please answer in Chinese.", param=QueryParam(mode="global"),
+                "What is the information being told here?", param=QueryParam(mode="global"),
             )
         )
 
@@ -121,7 +121,7 @@ async def main():
         # Perform hybrid search
         print(
             await rag.aquery(
-                "What kind of story is told in this first chapter? Please answer in Chinese.", param=QueryParam(mode="hybrid"),
+                "What is the information being told here?", param=QueryParam(mode="hybrid"),
             )
         )
     except Exception as e:

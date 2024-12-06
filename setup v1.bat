@@ -1,56 +1,60 @@
 @echo off
-REM 设置嵌入的 Python 解释器路径
-set PYTHON_PATH=.\python\python.exe
+REM Setup conda
+call conda create -n lightrag
+call conda activate lightrag
+call conda install python=3.11 git
 
-REM 检查是否存在嵌入的 Python 解释器
-if not exist "%PYTHON_PATH%" (
-    echo [错误] 未找到嵌入的 Python 解释器，请确保已将 Python 正确解压到 LightRAG/python 目录。
-    pause
-    exit /b
-)
-
-REM 检查 Python 版本
-"%PYTHON_PATH%" --version >nul 2>&1
+REM Check the Python version
+python --version >nul 2>&1
 if errorlevel 1 (
-    echo [错误] 未检测到有效的 Python 安装，请检查嵌入的 Python 是否完整。
+    echo [Error] No valid Python installation detected, please check if the embedded Python is complete.
     pause
     exit /b
 )
 
-REM 检查 requirements.txt 是否存在
+REM Check if requirements.txt exists
 if not exist "requirements.txt" (
-    echo [错误] 未找到 requirements.txt 文件，请确认文件存在。
+    echo [Error] The file requirements.txt was not found, please make sure it exists.
     pause
     exit /b
 )
 
-REM 使用 get-pip.py 安装 pip
-    echo [信息] 正在使用嵌入的 Python 安装 pip...
-    "%PYTHON_PATH%" "python\get-pip.py"
-    if errorlevel 1 (
-        echo [错误] pip 安装失败，请检查 get-pip.py 文件和网络连接。
-        pause
-        exit /b
-    )
-
-REM 安装项目依赖
-echo [信息] 正在使用嵌入的 Python 安装项目依赖，请稍候...
-"%PYTHON_PATH%" -m pip install -r requirements.txt
+REM Installing pybind11
+echo [Info] Installing pybind11 with embedded Python, please wait...
+pip install pybind11
 if errorlevel 1 (
-    echo [错误] 依赖安装失败，请检查 requirements.txt 文件或网络连接。
+    echo [Error] Pybind11 installation failed, please check your network connection.
     pause
     exit /b
 )
 
-REM 安装开发模式包
-echo [信息] 正在以可编辑模式安装当前项目...
-"%PYTHON_PATH%" -m pip install -e .
+REM Installing numpy
+echo [Info] Installing numpy with embedded Python, please wait...
+pip install numpy
 if errorlevel 1 (
-    echo [错误] 可编辑模式安装失败，请检查当前目录和 Python 环境。
+    echo [Error] Numpy installation failed, please check your network connection.
     pause
     exit /b
 )
 
-REM 提示完成
-echo [成功] 安装完成，项目已准备好运行！
+REM Installing project dependencies
+echo [Info] Installing project dependencies with embedded Python, please wait...
+pip install -r requirements.txt
+if errorlevel 1 (
+    echo [Error] Dependency installation failed, please check the requirements.txt file or your network connection.
+    pause
+    exit /b
+)
+
+REM Installing development mode packages
+echo [Info] Installing the current project in editable mode...
+pip install -e .
+if errorlevel 1 (
+    echo [Error] Editable mode installation failed, please check the current directory and Python environment.
+    pause
+    exit /b
+)
+
+REM Echo completion
+echo [Success] The installation is complete and the project is ready to run!
 pause
