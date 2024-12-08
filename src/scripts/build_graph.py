@@ -5,7 +5,7 @@ import numpy as np
 from dotenv import load_dotenv
 
 from lightrag import LightRAG, QueryParam
-from lightrag.llm import openai_complete_if_cache, openai_embedding
+from lightrag.llm import openai_complete_if_cache, openai_compatible_embedding
 from lightrag.utils import EmbeddingFunc
 
 from src.utils.utils import get_embedding_dim
@@ -34,11 +34,9 @@ if not os.path.exists(WORKING_DIR):
     os.mkdir(WORKING_DIR)
 
 
-async def llm_model_func(
-    prompt, system_prompt=None, history_messages=[], **kwargs
-) -> str:
+async def llm_model_func(prompt, system_prompt=None, history_messages=[], keyword_extraction=False, frontend_model=LLM_MODEL, **kwargs) -> str:
     return await openai_complete_if_cache(
-        LLM_MODEL,
+        frontend_model,
         prompt,
         system_prompt=system_prompt,
         history_messages=history_messages,
@@ -49,24 +47,12 @@ async def llm_model_func(
 
 
 async def embedding_func(texts: list[str]) -> np.ndarray:
-    return await openai_embedding(
+    return await openai_compatible_embedding(
         texts,
         model=EMBEDDING_MODEL,
         api_key=API_KEY,
         base_url=BASE_URL,
     )
-
-
-# function test
-async def test_funcs():
-    result = await llm_model_func("How are you?")
-    print("llm_model_func: ", result)
-
-    result = await embedding_func(["How are you?"])
-    print("embedding_func: ", result)
-
-
-# asyncio.run(test_funcs())
 
 
 async def main():
@@ -87,6 +73,7 @@ async def main():
 
         with open(file_DIR, "r", encoding="utf-8", errors='ignore') as f:
             await rag.ainsert(f.read())
+
 
         '''
         # Perform naive search
