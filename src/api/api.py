@@ -12,8 +12,8 @@ from lightrag import LightRAG, QueryParam
 from lightrag.llm import openai_complete_if_cache, openai_compatible_embedding
 from lightrag.utils import EmbeddingFunc
 
-from ..utils.models import *
-from ..utils.utils import process_messages, append_random_hex_to_list, get_embedding_dim, stream_generator
+from src.utils.models import *
+from src.utils.utils import process_messages, append_random_hex_to_list, get_embedding_dim, stream_generator
 
 # Apply nest_asyncio and load environment
 nest_asyncio.apply()
@@ -37,12 +37,20 @@ available_models = []
 app = FastAPI(title="LightRAG API", description="API for RAG operations")
 
 # LLM and embedding functions
-async def llm_model_func(prompt, system_prompt=None, history_messages=[], **kwargs):
+async def llm_model_func(prompt, system_prompt=None, history_messages=[], keyword_extraction=False, frontend_model=LLM_MODEL, **kwargs):
 
-    is_final_request = kwargs.get('is_final_request', False)
-    frontend_model = kwargs.get('frontend_model', LLM_MODEL)
-
-    if is_final_request:
+    if keyword_extraction:
+        history_messages = []
+        lines = prompt.split('\n')
+        last_assistant_idx = -1
+        for i, line in enumerate(lines):
+            if line.startswith('Assistant:'):
+                if i < len(lines) - 1 and lines[i+1].startswith('User:'):
+                    continue
+                last_assistant_idx = i
+        if last_assistant_idx != -1:
+            prompt = '\n'.join(lines[:last_assistant_idx])
+    else:
         messages = []
         current_role = None
         current_content = []
@@ -81,17 +89,6 @@ async def llm_model_func(prompt, system_prompt=None, history_messages=[], **kwar
             if last_user_idx != -1:
                 history_messages.extend(messages[last_user_idx:])
         prompt = ""
-    else:
-        history_messages = []
-        lines = prompt.split('\n')
-        last_assistant_idx = -1
-        for i, line in enumerate(lines):
-            if line.startswith('Assistant:'):
-                if i < len(lines) - 1 and lines[i+1].startswith('User:'):
-                    continue
-                last_assistant_idx = i
-        if last_assistant_idx != -1:
-            prompt = '\n'.join(lines[:last_assistant_idx])
 
     return await openai_complete_if_cache(
         frontend_model, prompt, system_prompt=system_prompt,
@@ -170,10 +167,10 @@ async def chat_completions_endpoint(request: ChatRequest):
         
         result = rag.query(
             processed_message,
-            param=QueryParam(mode="local", only_need_context=False),
-            system_prompt_from_frontend=system_prompt,
+            system_prompt=system_prompt,
             history_messages=history_messages,
-            frontend_model=request.model
+            frontend_model=request.model,
+            param=QueryParam(mode="local", only_need_context=False)
         )
         
         created_time = int(time.time())

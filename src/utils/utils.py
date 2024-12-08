@@ -18,10 +18,10 @@ async def stream_generator(
     # Perform the rag.query operation
     result = rag.query(
             processed_message,
-            param=QueryParam(mode="local", only_need_context=False),
-            system_prompt_from_frontend=system_prompt,
+            system_prompt=system_prompt,
             history_messages=history_messages,
-            frontend_model=frontend_model
+            frontend_model=frontend_model,
+            param=QueryParam(mode="local", only_need_context=False)
         )
     
     content_chunks = result.split()

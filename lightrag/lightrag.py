@@ -467,11 +467,11 @@ class LightRAG:
             if update_storage:
                 await self._insert_done()
 
-    def query(self, query: str, system_prompt=None, history_messages=[], param: QueryParam = QueryParam(), frontend_model=None):
+    def query(self, query: str, system_prompt=None, history_messages=[], frontend_model=None, param: QueryParam = QueryParam()):
         loop = always_get_an_event_loop()
-        return loop.run_until_complete(self.aquery(query, system_prompt, history_messages, param, frontend_model))
+        return loop.run_until_complete(self.aquery(query, system_prompt, history_messages, frontend_model, param))
 
-    async def aquery(self, query: str, system_prompt=None, history_messages=[], param: QueryParam = QueryParam(), frontend_model=None):
+    async def aquery(self, query: str, system_prompt=None, history_messages=[], frontend_model=None, param: QueryParam = QueryParam()):
         if param.mode in ["local", "global", "hybrid"]:
             response = await kg_query(
                 query,
