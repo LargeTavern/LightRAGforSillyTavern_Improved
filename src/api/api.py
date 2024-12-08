@@ -12,8 +12,8 @@ from lightrag import LightRAG, QueryParam
 from lightrag.llm import openai_complete_if_cache, openai_compatible_embedding
 from lightrag.utils import EmbeddingFunc
 
-from ..utils.models import *
-from ..utils.utils import process_messages, append_random_hex_to_list, get_embedding_dim, stream_generator
+from src.utils.models import *
+from src.utils.utils import process_messages, append_random_hex_to_list, get_embedding_dim, stream_generator
 
 # Apply nest_asyncio and load environment
 nest_asyncio.apply()

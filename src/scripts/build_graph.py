@@ -8,7 +8,7 @@ from lightrag import LightRAG, QueryParam
 from lightrag.llm import openai_complete_if_cache, openai_embedding
 from lightrag.utils import EmbeddingFunc
 
-from ..utils.utils import get_embedding_dim
+from src.utils.utils import get_embedding_dim
 
 load_dotenv()
 
