@@ -544,7 +544,6 @@ async def kg_query(
         history_messages=history_messages,
         stream=query_param.stream,
         mode=query_param.mode,
-        is_final_request=True,
         frontend_model=frontend_model,
     )
     if isinstance(response, str) and len(response) > len(sys_prompt):
@@ -1057,7 +1056,6 @@ async def naive_query(
         system_prompt=sys_prompt,
         history_messages=history_messages,
         mode=query_param.mode,
-        is_final_request=True,
         frontend_model=frontend_model,
     )
 
