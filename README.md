@@ -31,7 +31,7 @@ Testing conducted by the original creator of LightRAG for SillyTavern indicates 
 
 ## 📝 License
 
-This project is licensed under the GNU Affero General Public License (AGPL), with MIT license coming from the upstrem project and LightRAG.
+This project is licensed under the GNU Affero General Public License (AGPL), with MIT license coming from the upstream project and LightRAG.
 
 ## 🙏 Acknowledgments
 
