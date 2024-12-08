@@ -37,9 +37,7 @@ available_models = []
 app = FastAPI(title="LightRAG API", description="API for RAG operations")
 
 # LLM and embedding functions
-async def llm_model_func(prompt, system_prompt=None, history_messages=[], keyword_extraction=False, **kwargs):
-
-    frontend_model = kwargs.get('frontend_model', LLM_MODEL)
+async def llm_model_func(prompt, system_prompt=None, history_messages=[], keyword_extraction=False, frontend_model=LLM_MODEL, **kwargs):
 
     if keyword_extraction:
         history_messages = []
