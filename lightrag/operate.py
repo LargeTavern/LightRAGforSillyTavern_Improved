@@ -1,7 +1,8 @@
 import asyncio
 import json
 import re
-from typing import Union, Optional
+from tqdm.asyncio import tqdm as tqdm_async
+from typing import Union
 from collections import Counter, defaultdict
 import warnings
 from .utils import (
@@ -16,7 +17,6 @@ from .utils import (
     split_string_by_multi_markers,
     truncate_list_by_token_size,
     process_combine_contexts,
-    locate_json_string_body_from_string,
 )
 from .base import (
     BaseGraphStorage,
@@ -58,6 +58,9 @@ async def _handle_entity_relation_summary(
     llm_max_tokens = global_config["llm_model_max_token_size"]
     tiktoken_model_name = global_config["tiktoken_model_name"]
     summary_max_tokens = global_config["entity_summary_to_max_tokens"]
+    language = global_config["addon_params"].get(
+        "language", PROMPTS["DEFAULT_LANGUAGE"]
+    )
 
     tokens = encode_string_by_tiktoken(description, model_name=tiktoken_model_name)
     if len(tokens) < summary_max_tokens:  # No need for summary
@@ -69,6 +72,7 @@ async def _handle_entity_relation_summary(
     context_base = dict(
         entity_name=entity_or_relation_name,
         description_list=use_description.split(GRAPH_FIELD_SEP),
+        language=language,
     )
     use_prompt = prompt_template.format(**context_base)
     logger.debug(f"Trigger summary: {entity_or_relation_name}")
@@ -248,6 +252,27 @@ async def extract_entities(
     entity_extract_max_gleaning = global_config["entity_extract_max_gleaning"]
 
     ordered_chunks = list(chunks.items())
+    # add language and example number params to prompt
+    language = global_config["addon_params"].get(
+        "language", PROMPTS["DEFAULT_LANGUAGE"]
+    )
+    example_number = global_config["addon_params"].get("example_number", None)
+    if example_number and example_number < len(PROMPTS["entity_extraction_examples"]):
+        examples = "\n".join(
+            PROMPTS["entity_extraction_examples"][: int(example_number)]
+        )
+    else:
+        examples = "\n".join(PROMPTS["entity_extraction_examples"])
+
+    example_context_base = dict(
+        tuple_delimiter=PROMPTS["DEFAULT_TUPLE_DELIMITER"],
+        record_delimiter=PROMPTS["DEFAULT_RECORD_DELIMITER"],
+        completion_delimiter=PROMPTS["DEFAULT_COMPLETION_DELIMITER"],
+        entity_types=",".join(PROMPTS["DEFAULT_ENTITY_TYPES"]),
+        language=language,
+    )
+    # add example's format
+    examples = examples.format(**example_context_base)
 
     entity_extract_prompt = PROMPTS["entity_extraction"]
     context_base = dict(
@@ -255,7 +280,10 @@ async def extract_entities(
         record_delimiter=PROMPTS["DEFAULT_RECORD_DELIMITER"],
         completion_delimiter=PROMPTS["DEFAULT_COMPLETION_DELIMITER"],
         entity_types=",".join(PROMPTS["DEFAULT_ENTITY_TYPES"]),
+        examples=examples,
+        language=language,
     )
+
     continue_prompt = PROMPTS["entiti_continue_extraction"]
     if_loop_prompt = PROMPTS["entiti_if_loop_extraction"]
 
@@ -268,9 +296,12 @@ async def extract_entities(
         chunk_key = chunk_key_dp[0]
         chunk_dp = chunk_key_dp[1]
         content = chunk_dp["content"]
-        hint_prompt = entity_extract_prompt.format(**context_base, input_text=content)
-        final_result = await use_llm_func(hint_prompt)
+        # hint_prompt = entity_extract_prompt.format(**context_base, input_text=content)
+        hint_prompt = entity_extract_prompt.format(
+            **context_base, input_text="{input_text}"
+        ).format(**context_base, input_text=content)
 
+        final_result = await use_llm_func(hint_prompt)
         history = pack_user_ass_to_openai_messages(hint_prompt, final_result)
         for now_glean_index in range(entity_extract_max_gleaning):
             glean_result = await use_llm_func(continue_prompt, history_messages=history)
@@ -329,11 +360,15 @@ async def extract_entities(
         )
         return dict(maybe_nodes), dict(maybe_edges)
 
-    # use_llm_func is wrapped in ascynio.Semaphore, limiting max_async callings
-    results = await asyncio.gather(
-        *[_process_single_content(c) for c in ordered_chunks]
-    )
-    print()  # clear the progress bar
+    results = []
+    for result in tqdm_async(
+        asyncio.as_completed([_process_single_content(c) for c in ordered_chunks]),
+        total=len(ordered_chunks),
+        desc="Extracting entities from chunks",
+        unit="chunk",
+    ):
+        results.append(await result)
+
     maybe_nodes = defaultdict(list)
     maybe_edges = defaultdict(list)
     for m_nodes, m_edges in results:
@@ -341,18 +376,38 @@ async def extract_entities(
             maybe_nodes[k].extend(v)
         for k, v in m_edges.items():
             maybe_edges[tuple(sorted(k))].extend(v)
-    all_entities_data = await asyncio.gather(
-        *[
-            _merge_nodes_then_upsert(k, v, knowledge_graph_inst, global_config)
-            for k, v in maybe_nodes.items()
-        ]
-    )
-    all_relationships_data = await asyncio.gather(
-        *[
-            _merge_edges_then_upsert(k[0], k[1], v, knowledge_graph_inst, global_config)
-            for k, v in maybe_edges.items()
-        ]
-    )
+    logger.info("Inserting entities into storage...")
+    all_entities_data = []
+    for result in tqdm_async(
+        asyncio.as_completed(
+            [
+                _merge_nodes_then_upsert(k, v, knowledge_graph_inst, global_config)
+                for k, v in maybe_nodes.items()
+            ]
+        ),
+        total=len(maybe_nodes),
+        desc="Inserting entities",
+        unit="entity",
+    ):
+        all_entities_data.append(await result)
+
+    logger.info("Inserting relationships into storage...")
+    all_relationships_data = []
+    for result in tqdm_async(
+        asyncio.as_completed(
+            [
+                _merge_edges_then_upsert(
+                    k[0], k[1], v, knowledge_graph_inst, global_config
+                )
+                for k, v in maybe_edges.items()
+            ]
+        ),
+        total=len(maybe_edges),
+        desc="Inserting relationships",
+        unit="relationship",
+    ):
+        all_relationships_data.append(await result)
+
     if not len(all_entities_data):
         logger.warning("Didn't extract any entities, maybe your LLM is not working")
         return None
@@ -389,82 +444,110 @@ async def extract_entities(
     return knowledge_graph_inst
 
 
-async def local_query(
-    query: str,
+async def kg_query(
+    query,
     knowledge_graph_inst: BaseGraphStorage,
     entities_vdb: BaseVectorStorage,
     relationships_vdb: BaseVectorStorage,
     text_chunks_db: BaseKVStorage[TextChunkSchema],
     query_param: QueryParam,
     global_config: dict,
-    system_prompt: Optional[str] = None,  # 新增参数
+    system_prompt=None, 
+    history_messages=[],
+    frontend_model=None,
 ) -> str:
     context = None
+    example_number = global_config["addon_params"].get("example_number", None)
+    if example_number and example_number < len(PROMPTS["keywords_extraction_examples"]):
+        examples = "\n".join(
+            PROMPTS["keywords_extraction_examples"][: int(example_number)]
+        )
+    else:
+        examples = "\n".join(PROMPTS["keywords_extraction_examples"])
+    language = global_config["addon_params"].get(
+        "language", PROMPTS["DEFAULT_LANGUAGE"]
+    )
+
+    # Set mode
+    if query_param.mode not in ["local", "global", "hybrid"]:
+        logger.error(f"Unknown mode {query_param.mode} in kg_query")
+        return PROMPTS["fail_response"]
+
+    # LLM generate keywords
     use_model_func = global_config["llm_model_func"]
-    #print(f"global_config: {global_config}")
-    # 提取关键词的 prompt
     kw_prompt_temp = PROMPTS["keywords_extraction"]
-    kw_prompt = kw_prompt_temp.format(query=query)
-    result = await use_model_func(kw_prompt)
-    json_text = locate_json_string_body_from_string(result)
-
+    kw_prompt = kw_prompt_temp.format(query=query, examples=examples, language=language)
+    result = await use_model_func(
+        kw_prompt, keyword_extraction=True, mode=query_param.mode
+    )
+    logger.info("kw_prompt result:")
+    print(result)
     try:
-        # 尝试解析关键词
-        keywords_data = json.loads(json_text)
-        keywords = keywords_data.get("low_level_keywords", [])
-        keywords = ", ".join(keywords)
-    except json.JSONDecodeError:
-        try:
-            # 处理可能的格式错误
-            result = (
-                result.replace(kw_prompt[:-1], "")
-                .replace("user", "")
-                .replace("model", "")
-                .strip()
-            )
-            result = "{" + result.split("{")[-1].split("}")[0] + "}"
-
+        # json_text = locate_json_string_body_from_string(result) # handled in use_model_func
+        match = re.search(r"\{.*\}", result, re.DOTALL)
+        if match:
+            result = match.group(0)
             keywords_data = json.loads(result)
-            keywords = keywords_data.get("low_level_keywords", [])
-            keywords = ", ".join(keywords)
-        except json.JSONDecodeError as e:
-            print(f"JSON parsing error: {e}")
+
+            hl_keywords = keywords_data.get("high_level_keywords", [])
+            ll_keywords = keywords_data.get("low_level_keywords", [])
+        else:
+            logger.error("No JSON-like structure found in the result.")
             return PROMPTS["fail_response"]
 
-    if keywords:
-        context = await _build_local_query_context(
-            keywords,
-            knowledge_graph_inst,
-            entities_vdb,
-            text_chunks_db,
-            query_param,
-        )
+    # Handle parsing error
+    except json.JSONDecodeError as e:
+        print(f"JSON parsing error: {e} {result}")
+        return PROMPTS["fail_response"]
+
+    # Handdle keywords missing
+    if hl_keywords == [] and ll_keywords == []:
+        logger.warning("low_level_keywords and high_level_keywords is empty")
+        return PROMPTS["fail_response"]
+    if ll_keywords == [] and query_param.mode in ["local", "hybrid"]:
+        logger.warning("low_level_keywords is empty")
+        return PROMPTS["fail_response"]
+    else:
+        ll_keywords = ", ".join(ll_keywords)
+    if hl_keywords == [] and query_param.mode in ["global", "hybrid"]:
+        logger.warning("high_level_keywords is empty")
+        return PROMPTS["fail_response"]
+    else:
+        hl_keywords = ", ".join(hl_keywords)
+
+    # Build context
+    keywords = [ll_keywords, hl_keywords]
+    context = await _build_query_context(
+        keywords,
+        knowledge_graph_inst,
+        entities_vdb,
+        relationships_vdb,
+        text_chunks_db,
+        query_param,
+    )
 
     if query_param.only_need_context:
         return context
-
     if context is None:
         return PROMPTS["fail_response"]
-
-    response_type = query_param.response_type
-    # 如果前端传入了 system_prompt，优先使用前端值并结合RAG，否则使用默认的 RAG system_prompt
-        # 如果前端提供了 system_prompt
+    sys_prompt_temp = PROMPTS["rag_response_if_system_prompt_exists"] if system_prompt else PROMPTS["rag_response"]
+    sys_prompt = sys_prompt_temp.format(
+        context_data=context, response_type=query_param.response_type
+    )
     if system_prompt:
-            # 结合前端传入的 system_prompt 和 context 数据
-        sys_prompt = system_prompt + f"\n\nIf necessary, refer to the following and generate contextualized content; do not refer to it if there is no context or if the user's request does not relate in any way to the content below\n\n" + f"\n\n---Data tables---\n\n{context}"
-    else:
-        # 如果没有提供 system_prompt，保留原有的 Role 和 Goal 部分
-        sys_prompt_temp = PROMPTS["rag_response"]
-        sys_prompt = sys_prompt_temp.format(
-            context_data=context, response_type=query_param.response_type
-        )
-    #print(sys_prompt)
+        sys_prompt = system_prompt + sys_prompt
+    if query_param.only_need_prompt:
+        return sys_prompt
     response = await use_model_func(
         query,
         system_prompt=sys_prompt,
+        history_messages=history_messages,
+        stream=query_param.stream,
+        mode=query_param.mode,
+        is_final_request=True,
+        frontend_model=frontend_model,
     )
-
-    if len(response) > len(sys_prompt):
+    if isinstance(response, str) and len(response) > len(sys_prompt):
         response = (
             response.replace(sys_prompt, "")
             .replace("user", "")
@@ -477,22 +560,118 @@ async def local_query(
 
     return response
 
-async def _build_local_query_context(
+
+async def _build_query_context(
+    query: list,
+    knowledge_graph_inst: BaseGraphStorage,
+    entities_vdb: BaseVectorStorage,
+    relationships_vdb: BaseVectorStorage,
+    text_chunks_db: BaseKVStorage[TextChunkSchema],
+    query_param: QueryParam,
+):
+    ll_kewwords, hl_keywrds = query[0], query[1]
+    if query_param.mode in ["local", "hybrid"]:
+        if ll_kewwords == "":
+            ll_entities_context, ll_relations_context, ll_text_units_context = (
+                "",
+                "",
+                "",
+            )
+            warnings.warn(
+                "Low Level context is None. Return empty Low entity/relationship/source"
+            )
+            query_param.mode = "global"
+        else:
+            (
+                ll_entities_context,
+                ll_relations_context,
+                ll_text_units_context,
+            ) = await _get_node_data(
+                ll_kewwords,
+                knowledge_graph_inst,
+                entities_vdb,
+                text_chunks_db,
+                query_param,
+            )
+    if query_param.mode in ["global", "hybrid"]:
+        if hl_keywrds == "":
+            hl_entities_context, hl_relations_context, hl_text_units_context = (
+                "",
+                "",
+                "",
+            )
+            warnings.warn(
+                "High Level context is None. Return empty High entity/relationship/source"
+            )
+            query_param.mode = "local"
+        else:
+            (
+                hl_entities_context,
+                hl_relations_context,
+                hl_text_units_context,
+            ) = await _get_edge_data(
+                hl_keywrds,
+                knowledge_graph_inst,
+                relationships_vdb,
+                text_chunks_db,
+                query_param,
+            )
+    if query_param.mode == "hybrid":
+        entities_context, relations_context, text_units_context = combine_contexts(
+            [hl_entities_context, ll_entities_context],
+            [hl_relations_context, ll_relations_context],
+            [hl_text_units_context, ll_text_units_context],
+        )
+    elif query_param.mode == "local":
+        entities_context, relations_context, text_units_context = (
+            ll_entities_context,
+            ll_relations_context,
+            ll_text_units_context,
+        )
+    elif query_param.mode == "global":
+        entities_context, relations_context, text_units_context = (
+            hl_entities_context,
+            hl_relations_context,
+            hl_text_units_context,
+        )
+    return f"""
+<entities>
+```csv
+{entities_context}
+```
+</entities>
+<relationships>
+```csv
+{relations_context}
+```
+<relationships>
+<sources>
+```csv
+{text_units_context}
+```
+</sources>
+"""
+
+
+async def _get_node_data(
     query,
     knowledge_graph_inst: BaseGraphStorage,
     entities_vdb: BaseVectorStorage,
     text_chunks_db: BaseKVStorage[TextChunkSchema],
     query_param: QueryParam,
 ):
+    # get similar entities
     results = await entities_vdb.query(query, top_k=query_param.top_k)
-
     if not len(results):
         return None
+    # get entity information
     node_datas = await asyncio.gather(
         *[knowledge_graph_inst.get_node(r["entity_name"]) for r in results]
     )
     if not all([n is not None for n in node_datas]):
         logger.warning("Some nodes are missing, maybe the storage is damaged")
+
+    # get entity degree
     node_degrees = await asyncio.gather(
         *[knowledge_graph_inst.node_degree(r["entity_name"]) for r in results]
     )
@@ -501,15 +680,19 @@ async def _build_local_query_context(
         for k, n, d in zip(results, node_datas, node_degrees)
         if n is not None
     ]  # what is this text_chunks_db doing.  dont remember it in airvx.  check the diagram.
+    # get entitytext chunk
     use_text_units = await _find_most_related_text_unit_from_entities(
         node_datas, query_param, text_chunks_db, knowledge_graph_inst
     )
+    # get relate edges
     use_relations = await _find_most_related_edges_from_entities(
         node_datas, query_param, knowledge_graph_inst
     )
     logger.info(
         f"Local query uses {len(node_datas)} entites, {len(use_relations)} relations, {len(use_text_units)} text units"
     )
+
+    # build prompt
     entites_section_list = [["id", "entity", "type", "description", "rank"]]
     for i, n in enumerate(node_datas):
         entites_section_list.append(
@@ -544,20 +727,7 @@ async def _build_local_query_context(
     for i, t in enumerate(use_text_units):
         text_units_section_list.append([i, t["content"]])
     text_units_context = list_of_list_to_csv(text_units_section_list)
-    return f"""
------Entities-----
-```csv
-{entities_context}
-```
------Relationships-----
-```csv
-{relations_context}
-```
------Sources-----
-```csv
-{text_units_context}
-```
-"""
+    return entities_context, relations_context, text_units_context
 
 
 async def _find_most_related_text_unit_from_entities(
@@ -674,101 +844,9 @@ async def _find_most_related_edges_from_entities(
     return all_edges_data
 
 
-async def global_query(
-    query: str,
-    knowledge_graph_inst: BaseGraphStorage,
-    entities_vdb: BaseVectorStorage,
-    relationships_vdb: BaseVectorStorage,
-    text_chunks_db: BaseKVStorage[TextChunkSchema],
-    query_param: QueryParam,
-    global_config: dict,
-    system_prompt: Optional[str] = None,  # 新增参数
-) -> str:
-    context = None
-    use_model_func = global_config["llm_model_func"]
-
-    # 提取关键词的 prompt
-    kw_prompt_temp = PROMPTS["keywords_extraction"]
-    kw_prompt = kw_prompt_temp.format(query=query)
-    result = await use_model_func(kw_prompt)
-    json_text = locate_json_string_body_from_string(result)
-
-    try:
-        # 尝试解析关键词
-        keywords_data = json.loads(json_text)
-        keywords = keywords_data.get("high_level_keywords", [])
-        keywords = ", ".join(keywords)
-    except json.JSONDecodeError:
-        try:
-            # 处理可能的格式错误
-            result = (
-                result.replace(kw_prompt[:-1], "")
-                .replace("user", "")
-                .replace("model", "")
-                .strip()
-            )
-            result = "{" + result.split("{")[-1].split("}")[0] + "}"
-
-            keywords_data = json.loads(result)
-            keywords = keywords_data.get("high_level_keywords", [])
-            keywords = ", ".join(keywords)
-        except json.JSONDecodeError as e:
-            # 处理 JSON 解析错误
-            print(f"JSON parsing error: {e}")
-            return PROMPTS["fail_response"]
-
-    # 构建全局查询上下文
-    if keywords:
-        context = await _build_global_query_context(
-            keywords,
-            knowledge_graph_inst,
-            entities_vdb,
-            relationships_vdb,
-            text_chunks_db,
-            query_param,
-        )
-
-    if query_param.only_need_context:
-        return context
-
-    if context is None:
-        return PROMPTS["fail_response"]
-
-    # 如果前端传入了 system_prompt，优先使用前端值并结合RAG，否则使用默认的 RAG system_prompt
-        # 如果前端提供了 system_prompt
-    if system_prompt:
-            # 结合前端传入的 system_prompt 和 context 数据
-        sys_prompt = system_prompt + f"\n\nIf necessary, refer to the following and generate contextualized content; do not refer to it if there is no context or if the user's request does not relate in any way to the content below\n\n" + f"\n\n---Data tables---\n\n{context}"
-    else:
-        # 如果没有提供 system_prompt，保留原有的 Role 和 Goal 部分
-        sys_prompt_temp = PROMPTS["rag_response"]
-        sys_prompt = sys_prompt_temp.format(
-            context_data=context, response_type=query_param.response_type
-        )
-    response = await use_model_func(
-        query,
-        system_prompt=sys_prompt,
-    )
-
-    if len(response) > len(sys_prompt):
-        response = (
-            response.replace(sys_prompt, "")
-            .replace("user", "")
-            .replace("model", "")
-            .replace(query, "")
-            .replace("<system>", "")
-            .replace("</system>", "")
-            .strip()
-        )
-
-    return response
-
-
-
-async def _build_global_query_context(
+async def _get_edge_data(
     keywords,
     knowledge_graph_inst: BaseGraphStorage,
-    entities_vdb: BaseVectorStorage,
     relationships_vdb: BaseVectorStorage,
     text_chunks_db: BaseKVStorage[TextChunkSchema],
     query_param: QueryParam,
@@ -810,6 +888,7 @@ async def _build_global_query_context(
     logger.info(
         f"Global query uses {len(use_entities)} entites, {len(edge_datas)} relations, {len(use_text_units)} text units"
     )
+
     relations_section_list = [
         ["id", "source", "target", "description", "keywords", "weight", "rank"]
     ]
@@ -844,21 +923,7 @@ async def _build_global_query_context(
     for i, t in enumerate(use_text_units):
         text_units_section_list.append([i, t["content"]])
     text_units_context = list_of_list_to_csv(text_units_section_list)
-
-    return f"""
------Entities-----
-```csv
-{entities_context}
-```
------Relationships-----
-```csv
-{relations_context}
-```
------Sources-----
-```csv
-{text_units_context}
-```
-"""
+    return entities_context, relations_context, text_units_context
 
 
 async def _find_most_related_entities_from_relationships(
@@ -908,7 +973,6 @@ async def _find_related_text_unit_from_relationships(
         split_string_by_multi_markers(dp["source_id"], [GRAPH_FIELD_SEP])
         for dp in edge_datas
     ]
-
     all_text_units_lookup = {}
 
     for index, unit_list in enumerate(text_units):
@@ -935,143 +999,11 @@ async def _find_related_text_unit_from_relationships(
     return all_text_units
 
 
-async def hybrid_query(
-    query,
-    knowledge_graph_inst: BaseGraphStorage,
-    entities_vdb: BaseVectorStorage,
-    relationships_vdb: BaseVectorStorage,
-    text_chunks_db: BaseKVStorage[TextChunkSchema],
-    query_param: QueryParam,
-    global_config: dict,
-    system_prompt: Optional[str] = None,  # 新增参数
-) -> str:
-    low_level_context = None
-    high_level_context = None
-    use_model_func = global_config["llm_model_func"]
-
-    kw_prompt_temp = PROMPTS["keywords_extraction"]
-    kw_prompt = kw_prompt_temp.format(query=query)
-
-    result = await use_model_func(kw_prompt)
-    json_text = locate_json_string_body_from_string(result)
-    try:
-        keywords_data = json.loads(json_text)
-        hl_keywords = keywords_data.get("high_level_keywords", [])
-        ll_keywords = keywords_data.get("low_level_keywords", [])
-        hl_keywords = ", ".join(hl_keywords)
-        ll_keywords = ", ".join(ll_keywords)
-    except json.JSONDecodeError:
-        try:
-            result = (
-                result.replace(kw_prompt[:-1], "")
-                .replace("user", "")
-                .replace("model", "")
-                .strip()
-            )
-            result = "{" + result.split("{")[-1].split("}")[0] + "}"
-            keywords_data = json.loads(result)
-            hl_keywords = keywords_data.get("high_level_keywords", [])
-            ll_keywords = keywords_data.get("low_level_keywords", [])
-            hl_keywords = ", ".join(hl_keywords)
-            ll_keywords = ", ".join(ll_keywords)
-        # Handle parsing error
-        except json.JSONDecodeError as e:
-            print(f"JSON parsing error: {e}")
-            return PROMPTS["fail_response"]
-
-    if ll_keywords:
-        low_level_context = await _build_local_query_context(
-            ll_keywords,
-            knowledge_graph_inst,
-            entities_vdb,
-            text_chunks_db,
-            query_param,
-        )
-
-    if hl_keywords:
-        high_level_context = await _build_global_query_context(
-            hl_keywords,
-            knowledge_graph_inst,
-            entities_vdb,
-            relationships_vdb,
-            text_chunks_db,
-            query_param,
-        )
-
-    context = combine_contexts(high_level_context, low_level_context)
-
-    if query_param.only_need_context:
-        return context
-    if context is None:
-        return PROMPTS["fail_response"]
-
-    response_type = query_param.response_type
-    # 如果前端传入了 system_prompt，优先使用前端值并结合RAG，否则使用默认的 RAG system_prompt
-            # 如果前端提供了 system_prompt
-    if system_prompt:
-        # 结合前端传入的 system_prompt 和 context 数据
-        sys_prompt = system_prompt +f"\n\nIf necessary, refer to the following and generate contextualized content; do not refer to it if there is no context or if the user's request does not relate in any way to the content below\n\n"+ f"\n\n---Data tables---\n\n{context}"
-    else:
-        # 如果没有提供 system_prompt，保留原有的 Role 和 Goal 部分
-        sys_prompt_temp = PROMPTS["rag_response"]
-        sys_prompt = sys_prompt_temp.format(
-            context_data=context, response_type=query_param.response_type
-        )
-    response = await use_model_func(
-        query,
-        system_prompt=sys_prompt,
-    )
-    if len(response) > len(sys_prompt):
-        response = (
-            response.replace(sys_prompt, "")
-            .replace("user", "")
-            .replace("model", "")
-            .replace(query, "")
-            .replace("<system>", "")
-            .replace("</system>", "")
-            .strip()
-        )
-    return response
-
-
-def combine_contexts(high_level_context, low_level_context):
+def combine_contexts(entities, relationships, sources):
     # Function to extract entities, relationships, and sources from context strings
-    # sources_match这一部分可以不需要，只保留entities和relationships的话效果会有所下降但节省tokens
-    def extract_sections(context):
-        entities_match = re.search(
-            r"-----Entities-----\s*```csv\s*(.*?)\s*```", context, re.DOTALL
-        )
-        relationships_match = re.search(
-            r"-----Relationships-----\s*```csv\s*(.*?)\s*```", context, re.DOTALL
-        )
-        sources_match = re.search(
-            r"-----Sources-----\s*```csv\s*(.*?)\s*```", context, re.DOTALL
-        )
-
-        entities = entities_match.group(1) if entities_match else ""
-        relationships = relationships_match.group(1) if relationships_match else ""
-        sources = sources_match.group(1) if sources_match else ""
-
-        return entities, relationships, sources
-
-    # Extract sections from both contexts
-
-    if high_level_context is None:
-        warnings.warn(
-            "High Level context is None. Return empty High entity/relationship/source"
-        )
-        hl_entities, hl_relationships, hl_sources = "", "", ""
-    else:
-        hl_entities, hl_relationships, hl_sources = extract_sections(high_level_context)
-
-    if low_level_context is None:
-        warnings.warn(
-            "Low Level context is None. Return empty Low entity/relationship/source"
-        )
-        ll_entities, ll_relationships, ll_sources = "", "", ""
-    else:
-        ll_entities, ll_relationships, ll_sources = extract_sections(low_level_context)
-
+    hl_entities, ll_entities = entities[0], entities[1]
+    hl_relationships, ll_relationships = relationships[0], relationships[1]
+    hl_sources, ll_sources = sources[0], sources[1]
     # Combine and deduplicate the entities
     combined_entities = process_combine_contexts(hl_entities, ll_entities)
 
@@ -1083,21 +1015,7 @@ def combine_contexts(high_level_context, low_level_context):
     # Combine and deduplicate the sources
     combined_sources = process_combine_contexts(hl_sources, ll_sources)
 
-    # Format the combined context
-    return f"""
------Entities-----
-```csv
-{combined_entities}
-```
------Relationships-----
-```csv
-{combined_relationships}
-```
------Sources-----
-```csv
-{combined_sources}
-```
-"""
+    return combined_entities, combined_relationships, combined_sources
 
 
 async def naive_query(
@@ -1106,7 +1024,9 @@ async def naive_query(
     text_chunks_db: BaseKVStorage[TextChunkSchema],
     query_param: QueryParam,
     global_config: dict,
-    system_prompt: Optional[str] = None,  # 新增参数
+    system_prompt=None, 
+    history_messages=[],
+    frontend_model=None,
 ):
     use_model_func = global_config["llm_model_func"]
     results = await chunks_vdb.query(query, top_k=query_param.top_k)
@@ -1121,24 +1041,24 @@ async def naive_query(
         max_token_size=query_param.max_token_for_text_unit,
     )
     logger.info(f"Truncate {len(chunks)} to {len(maybe_trun_chunks)} chunks")
-    section = "--New Chunk--\n".join([c["content"] for c in maybe_trun_chunks])
+    section = "\n--New Chunk--\n".join([c["content"] for c in maybe_trun_chunks])
     if query_param.only_need_context:
         return section
-
-    # 如果前端传入了 system_prompt，优先使用前端值并结合RAG，否则使用默认的 RAG system_prompt
-        # 如果前端提供了 system_prompt
+    sys_prompt_temp = PROMPTS["naive_rag_response_if_system_prompt_exists"] if system_prompt else PROMPTS["naive_rag_response"]
+    sys_prompt = sys_prompt_temp.format(
+        content_data=section, response_type=query_param.response_type
+    )
     if system_prompt:
-            # 结合前端传入的 system_prompt 和 context 数据
-        sys_prompt = system_prompt + f"\n\nIf necessary, refer to the following and generate contextualized content; do not refer to it if there is no context or if the user's request does not relate in any way to the content below\n\n" + f"\n\n---Data tables---\n\n{context}"
-    else:
-        # 如果没有提供 system_prompt，保留原有的 Role 和 Goal 部分
-        sys_prompt_temp = PROMPTS["rag_response"]
-        sys_prompt = sys_prompt_temp.format(
-            context_data=section, response_type=query_param.response_type
-        )
+        sys_prompt = system_prompt + sys_prompt
+    if query_param.only_need_prompt:
+        return sys_prompt
     response = await use_model_func(
         query,
         system_prompt=sys_prompt,
+        history_messages=history_messages,
+        mode=query_param.mode,
+        is_final_request=True,
+        frontend_model=frontend_model,
     )
 
     if len(response) > len(sys_prompt):

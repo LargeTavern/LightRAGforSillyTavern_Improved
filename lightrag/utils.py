@@ -47,10 +47,27 @@ class EmbeddingFunc:
 
 def locate_json_string_body_from_string(content: str) -> Union[str, None]:
     """Locate the JSON string body from a string"""
-    maybe_json_str = re.search(r"{.*}", content, re.DOTALL)
-    if maybe_json_str is not None:
-        return maybe_json_str.group(0)
-    else:
+    try:
+        maybe_json_str = re.search(r"{.*}", content, re.DOTALL)
+        if maybe_json_str is not None:
+            maybe_json_str = maybe_json_str.group(0)
+            maybe_json_str = maybe_json_str.replace("\\n", "")
+            maybe_json_str = maybe_json_str.replace("\n", "")
+            maybe_json_str = maybe_json_str.replace("'", '"')
+            # json.loads(maybe_json_str) # don't check here, cannot validate schema after all
+            return maybe_json_str
+    except Exception:
+        pass
+        # try:
+        #     content = (
+        #         content.replace(kw_prompt[:-1], "")
+        #         .replace("user", "")
+        #         .replace("model", "")
+        #         .strip()
+        #     )
+        #     maybe_json_str = "{" + content.split("{")[1].split("}")[0] + "}"
+        #     json.loads(maybe_json_str)
+
         return None
 
 
@@ -290,3 +307,86 @@ def process_combine_contexts(hl, ll):
     combined_sources_result = "\n".join(combined_sources_result)
 
     return combined_sources_result
+
+
+async def get_best_cached_response(
+    hashing_kv,
+    current_embedding,
+    similarity_threshold=0.95,
+    mode="default",
+) -> Union[str, None]:
+    # Get mode-specific cache
+    mode_cache = await hashing_kv.get_by_id(mode)
+    if not mode_cache:
+        return None
+
+    best_similarity = -1
+    best_response = None
+    best_prompt = None
+    best_cache_id = None
+
+    # Only iterate through cache entries for this mode
+    for cache_id, cache_data in mode_cache.items():
+        if cache_data["embedding"] is None:
+            continue
+
+        # Convert cached embedding list to ndarray
+        cached_quantized = np.frombuffer(
+            bytes.fromhex(cache_data["embedding"]), dtype=np.uint8
+        ).reshape(cache_data["embedding_shape"])
+        cached_embedding = dequantize_embedding(
+            cached_quantized,
+            cache_data["embedding_min"],
+            cache_data["embedding_max"],
+        )
+
+        similarity = cosine_similarity(current_embedding, cached_embedding)
+        if similarity > best_similarity:
+            best_similarity = similarity
+            best_response = cache_data["return"]
+            best_prompt = cache_data["original_prompt"]
+            best_cache_id = cache_id
+
+    if best_similarity > similarity_threshold:
+        prompt_display = (
+            best_prompt[:50] + "..." if len(best_prompt) > 50 else best_prompt
+        )
+        log_data = {
+            "event": "cache_hit",
+            "mode": mode,
+            "similarity": round(best_similarity, 4),
+            "cache_id": best_cache_id,
+            "original_prompt": prompt_display,
+        }
+        logger.info(json.dumps(log_data, ensure_ascii=False))
+        return best_response
+    return None
+
+
+def cosine_similarity(v1, v2):
+    """Calculate cosine similarity between two vectors"""
+    dot_product = np.dot(v1, v2)
+    norm1 = np.linalg.norm(v1)
+    norm2 = np.linalg.norm(v2)
+    return dot_product / (norm1 * norm2)
+
+
+def quantize_embedding(embedding: np.ndarray, bits=8) -> tuple:
+    """Quantize embedding to specified bits"""
+    # Calculate min/max values for reconstruction
+    min_val = embedding.min()
+    max_val = embedding.max()
+
+    # Quantize to 0-255 range
+    scale = (2**bits - 1) / (max_val - min_val)
+    quantized = np.round((embedding - min_val) * scale).astype(np.uint8)
+
+    return quantized, min_val, max_val
+
+
+def dequantize_embedding(
+    quantized: np.ndarray, min_val: float, max_val: float, bits=8
+) -> np.ndarray:
+    """Restore quantized embedding"""
+    scale = (max_val - min_val) / (2**bits - 1)
+    return (quantized * scale + min_val).astype(np.float32)
