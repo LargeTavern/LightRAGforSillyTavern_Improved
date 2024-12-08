@@ -71,7 +71,8 @@ async def openai_complete_if_cache(
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
     messages.extend(history_messages)
-    messages.append({"role": "user", "content": prompt})
+    if prompt:
+        messages.append({"role": "user", "content": prompt})
 
     hashing_kv: BaseKVStorage = kwargs.pop("hashing_kv", None)
     # Handle cache
