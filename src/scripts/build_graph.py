@@ -71,8 +71,23 @@ async def main():
         )
 
 
-        with open(file_DIR, "r", encoding="utf-8", errors='ignore') as f:
-            await rag.ainsert(f.read())
+        # Check if file_DIR is a directory
+        if os.path.isdir(file_DIR):
+            # Iterate through all files in the directory
+            for filename in os.listdir(file_DIR):
+                file_path = os.path.join(file_DIR, filename)
+                # Check if it's a file (not a directory)
+                if os.path.isfile(file_path):
+                    try:
+                        with open(file_path, "r", encoding="utf-8", errors='ignore') as f:
+                            print(f"Processing file: {filename}")
+                            await rag.ainsert(f.read())
+                    except Exception as e:
+                        print(f"Error processing file {filename}: {e}")
+        else:
+            # If file_DIR is a single file
+            with open(file_DIR, "r", encoding="utf-8", errors='ignore') as f:
+                await rag.ainsert(f.read())
 
 
         '''
