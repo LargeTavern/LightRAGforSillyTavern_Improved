@@ -1,59 +1,42 @@
-<center><h2>🚀 LightRAG: Simple and Fast Retrieval-Augmented Generation</h2></center>
+# LightRAG for SillyTavern (modified fork)
+
+[中文](README_zh-CN.md) | English
+
+An enhanced fork of the LightRAG project, optimized for seamless integration with SillyTavern via the use of an API Proxy.
+
+## 🤖 What is LightRAG?
+
+LightRAG is a sophisticated Retrieval-Augmented Generation (RAG) system designed to enhance large language models (LLMs) by integrating external knowledge sources. This integration enables the generation of more accurate and contextually relevant responses tailored to user needs. Unlike traditional RAG systems that rely on flat data representations, LightRAG incorporates graph structures into text indexing and retrieval processes. This dual-level retrieval system enhances comprehensive information retrieval from both low-level and high-level knowledge discovery. The use of graph structures with vector representations facilitates efficient retrieval of related entities and their relationships, significantly improving response times while maintaining contextual relevance. LightRAG also employs an incremental update algorithm to ensure timely integration of new data, allowing the system to remain effective and responsive in rapidly changing data environments. Extensive experimental validation has demonstrated considerable improvements in retrieval accuracy and efficiency compared to existing approaches. LightRAG is open-source and available at [GitHub](https://github.com/HKUDS/LightRAG).
 
 
-![LightRAG Image](https://i-blog.csdnimg.cn/direct/567139f1a36e4564abc63ce5c12b6271.jpeg)
+Testing conducted by the original creator of LightRAG for SillyTavern indicates significant performance improvements over SillyTavern's Data Bank feature. According to their findings, the LLM retrieval capabilities using LightRAG are approximately twice as accurate compared to basic RAG implementations found in SillyTavern.
 
-<div align='center'>
-     <p>
-        <a href='https://lightrag.github.io'><img src='https://img.shields.io/badge/Project-Page-Green'></a>
-        <a href='https://youtu.be/oageL-1I0GE'><img src='https://badges.aleen42.com/src/youtube.svg'></a>
-        <a href='https://arxiv.org/abs/2410.05779'><img src='https://img.shields.io/badge/arXiv-2410.05779-b31b1b'></a>
-        <a href='https://learnopencv.com/lightrag'><img src='https://img.shields.io/badge/LearnOpenCV-blue'></a>
-    </p>
-     <p>
-          <img src='https://img.shields.io/github/stars/hkuds/lightrag?color=green&style=social' />
-        <img src="https://img.shields.io/badge/python->=3.9.11-blue">
-        <a href="https://pypi.org/project/lightrag-hku/"><img src="https://img.shields.io/pypi/v/lightrag-hku.svg"></a>
-        <a href="https://pepy.tech/project/lightrag-hku"><img src="https://static.pepy.tech/badge/lightrag-hku/month"></a>
-    </p>
-    <p>
-    <a href='https://discord.gg/yF2MmDJyGJ'><img src='https://discordapp.com/api/guilds/1296348098003734629/widget.png?style=shield'></a>
-        <a href='https://github.com/HKUDS/LightRAG/issues/285'><img src='https://img.shields.io/badge/群聊-wechat-green'></a>
-    </p>
+## ✨ Improvements Over the Original Fork
 
-This repository hosts the code of LightRAG. The structure of this code is based on [nano-graphrag](https://github.com/gusye1234/nano-graphrag).
-![LightRAG Diagram](https://i-blog.csdnimg.cn/direct/b2aaf634151b4706892693ffb43d9093.png)
-</div>
+- ⚡ Updated to latest LightRAG codebase
+- 🔧 Enhanced code optimization and cleanup
+- 📚 Enhanced history message processing
+- 🌐 Translated to English (see the `english-master` branch)
 
-## 写在前面
-### 1.该项目尚未完成，随时会update，所以暂时仅供内测
-### 2.在开始前请确保你知道你正在做什么以及你使用该项目的目的
-### 3.运行之前请手动修改.env中的变量（API key 和BaseURL等，不修改是无法进行下一步的！！！），或者运行set env.bat以更改.env中的环境变量(目前仅直接支持OpenAI模型，其他模型请使用中转系统来支持OpenAI标准格式的响应)
-### 4.修改好环境变量之后，打开built your Graph.bat以创建图谱
-### 5.打开Run API.bat以开始API服务，运行后可响应酒馆的请求
-### 6.视频与文字教程正在锐意制作中，请耐心等待
-### 7.未来我们会逐步完善，目前正在实现上传文件并插入现有知识图谱的功能
+## 🔧 Prerequisites
 
+- Anaconda or Miniconda (recommended)
 
+## 🚀 Quick Start
 
-## Contribution
+1. Run `InstallRequirements.bat` to install the environments and setup your Anaconda/Miniconda environment
+2. Run `SetupRAG.bat` to initialize the RAG
+3. Copy .env.example to .env and update the Environment Variables (or use `SetupEnv.bat` if you feel uncomfortable to do so)
+4. Execute `Start.bat` to launch the API server
 
-Thank you to all our contributors!
+## 📝 License
 
-<a href="https://github.com/HKUDS/LightRAG/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=HKUDS/LightRAG" />
-</a>
+This project is licensed under the GNU Affero General Public License (AGPL), with MIT license coming from the upstrem project and LightRAG.
 
-## 🌟Citation
+## 🙏 Acknowledgments
 
-```python
-@article{guo2024lightrag,
-title={LightRAG: Simple and Fast Retrieval-Augmented Generation},
-author={Zirui Guo and Lianghao Xia and Yanhua Yu and Tu Ao and Chao Huang},
-year={2024},
-eprint={2410.05779},
-archivePrefix={arXiv},
-primaryClass={cs.IR}
-}
-```
-**Thank you for your interest in our work!**
+- Built upon the original LightRAG project from the University of Hong Kong
+- Special thanks to **HerSophia** (@goddess_boreas on Discord) from the 类脑 ΟΔΥΣΣΕΙΑ Discord server for creating the original LightRAG for SillyTavern
+
+---
+*Made with ❤️ for the SillyTavern community*
