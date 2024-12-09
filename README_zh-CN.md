@@ -6,9 +6,9 @@
 
 ## 🤖 什么是LightRAG？
 
-LightRAG是由香港大学研究人员开发的检索增强生成(RAG)系统。它通过将图结构整合到文本索引和检索过程中来增强大型语言模型的能力。该系统采用双层检索方法，结合了低层次（特定实体和关系）和高层次（更广泛的主题）信息发现，使其在理解和检索复杂信息方面比传统RAG系统更有效。LightRAG采用增量更新算法，确保新数据的及时集成，使系统在快速变化的数据环境中保持有效运作。该项目是开源的，可在[GitHub](https://github.com/HKUDS/LightRAG)上获取。
+LightRAG是由香港大学研究人员开发的检索增强生成(RAG)系统。它通过将图结构整合到文本索引和检索过程中来增强大型语言模型。该系统采用双层检索方法，结合了低层次（特定实体和关系）和高层次（更广泛的主题和主题）信息发现，使其在理解和检索复杂信息方面比传统RAG系统更有效。LightRAG采用增量更新算法，确保新数据的及时集成，使系统在快速变化的数据环境中保持有效。该项目是开源的，可在[GitHub](https://github.com/HKUDS/LightRAG)上获取。
 
-根据LightRAG for SillyTavern原作者的测试，其性能显著优于SillyTavern的数据库功能。据其发现，使用LightRAG的LLM检索能力比SillyTavern中的基础RAG实现准确度高出约两倍。
+根据LightRAG for SillyTavern原作者的测试，其性能显著优于SillyTavern的数据库功能。据其发现，使用LightRAG的LLM检索能力比基础RAG实现准确度高出约两倍。
 
 ## ✨ 相比原始分支的改进
 
@@ -20,7 +20,7 @@ LightRAG是由香港大学研究人员开发的检索增强生成(RAG)系统。�
 ## 🔧 前置要求
 
 - Anaconda或Miniconda（推荐）
-- 合适的LLM/嵌入模型（推荐GPT-4o-mini、Gemini-1.5-Flash(-8B)或同等级别；嵌入模型推荐mxbai-embedding-large或同等级别）
+- 合适的LLM/嵌入模型（推荐GPT-4o-mini、Gemini-1.5-Flash或同等级别；嵌入模型推荐mxbai-embedding-large或同等级别）
 
 ## 🚀 快速开始
 

@@ -4,7 +4,7 @@ echo Currently, only OpenAI models are supported directly, for other models, ple
 echo If you want to skip a variable you can type "skip" and press the enter key!
 echo.
 
-:: Step 1: Step 2: Ensure that file_DIR is not added repeatedly
+:: Step 1: Ensure that file_DIR is not added repeatedly
 setlocal enabledelayedexpansion
 set /p file_DIR="Please enter the path of the folder to be used for scanning your documents (Default: ./text/book.txt; type skip to skip): "
 if "%file_DIR%"=="skip" (
@@ -67,7 +67,19 @@ if "%LLM_MODEL%"=="skip" (
     echo Environment variable LLM_MODEL is set to: %LLM_MODEL%
 )
 
-:: Step 6: Setup EMBEDDING_MODEL
+:: Step 6: Setup KNOWLEDGE_GRAPH_MODEL
+set /p KNOWLEDGE_GRAPH_MODEL="Please enter the LLM KNOWLEDGE GRAPH model (type skip to skip): "
+if "%KNOWLEDGE_GRAPH_MODEL%"=="skip" (
+    echo Skip setting KNOWLEDGE_GRAPH_MODEL
+) else (
+    echo Updating KNOWLEDGE_GRAPH_MODEL environment variable...
+    findstr /v "KNOWLEDGE_GRAPH_MODEL=" .env > .env.tmp
+    echo KNOWLEDGE_GRAPH_MODEL=%KNOWLEDGE_GRAPH_MODEL% >> .env.tmp
+    move /Y .env.tmp .env
+    echo The environment variable KNOWLEDGE_GRAPH_MODEL has been set to: %KNOWLEDGE_GRAPH_MODEL%
+)
+
+:: Step 7: Setup EMBEDDING_MODEL
 set /p EMBEDDING_MODEL="Please enter the embedding model (type skip to skip): "
 if "%EMBEDDING_MODEL%"=="skip" (
     echo Skip setting EMBEDDING_MODEL
@@ -79,7 +91,7 @@ if "%EMBEDDING_MODEL%"=="skip" (
     echo The environment variable EMBEDDING_MODEL has been set to: %EMBEDDING_MODEL%
 )
 
-:: Step 7: Setup EMBEDDING_MAX_TOKEN_SIZE
+:: Step 8: Setup EMBEDDING_MAX_TOKEN_SIZE
 set /p EMBEDDING_MAX_TOKEN_SIZE="Please enter the maximum number of tokens for the embedding model (Default: 2046; type skip to skip): "
 if "%EMBEDDING_MAX_TOKEN_SIZE%"=="skip" (
     echo Skip setting EMBEDDING_MAX_TOKEN_SIZE
@@ -92,7 +104,7 @@ if "%EMBEDDING_MAX_TOKEN_SIZE%"=="skip" (
     echo The environment variable EMBEDDING_MAX_TOKEN_SIZE has been set to %EMBEDDING_MAX_TOKEN_SIZE%
 )
 
-:: Step 8: Setup API_port
+:: Step 9: Setup API_port
 set /p API_port="Please enter the service port (Default: 8020; type skip to skip): "
 if "%API_port%"=="skip" (
     echo Skip setting API_port
