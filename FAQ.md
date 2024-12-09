@@ -7,7 +7,8 @@ LightRAG is a Retrieval-Augmented Generation (RAG) system developed by researche
 
 ## Q2: What model should I use?
 - For LightRAG operations (knowledge graph creation and keyword extraction):
-  - Mid-tier models like GPT-4o-mini and Gemini 1.5 Flash (including the 8B model) work well based on testing (Top of the line models are overkill for these tasks)
+  - Mid-tier models like GPT-4o-mini and Gemini 1.5 Flash (not strongly recommending the 8B model as sometimes it fails to format a JSON properly) work well based on testing 
+  - Top of the line models should only be useful for creating the knowledge graph
   - These handle the graph structure creation and keyword processing effectively
 
 - For embedding:
@@ -21,9 +22,10 @@ LightRAG is a Retrieval-Augmented Generation (RAG) system developed by researche
 ## Q3: How is LightRAG compared to SillyTavern's RAG (Data Bank/Vector Storage)?
 According to the original creator of LightRAG for SillyTavern, LightRAG's retrieval capabilities are approximately twice as accurate compared to basic RAG implementations.
 
-## Q4: What if I want to update my knowledge graph? Adding or removing documents?
+## Q4: What if I want to update my knowledge graph? Updating or removing documents?
 Currently, document management is limited:
-- It's not possible to add or remove individual documents
+- Adding new documents is fine
+- It's not possible to update or remove individual documents
 - To make changes, you need to delete your working folder and recreate it entirely
 - This is a known limitation of the current implementation
 

@@ -20,7 +20,7 @@ Testing conducted by the original creator of LightRAG for SillyTavern indicates 
 ## 🔧 Prerequisites
 
 - Anaconda or Miniconda (recommended)
-- A capable LLM/Embedding Model (GPT-4o-mini, Gemini-1.5-Flash(-8B), or equivalent recommended; mxbai-embedding-large or equivalent recommended)
+- A capable LLM/Embedding Model (GPT-4o-mini, Gemini-1.5-Flash, or equivalent recommended; mxbai-embedding-large or equivalent recommended)
 
 ## 🚀 Quick Start
 
