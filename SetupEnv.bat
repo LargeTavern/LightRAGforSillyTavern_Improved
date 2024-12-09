@@ -68,7 +68,19 @@ if "%LLM_MODEL%"=="skip" (
     echo 已完成设置 LLM_MODEL ，设置为：%LLM_MODEL%
 )
 
-:: Step 6: 设置用户输入 EMBEDDING_MODEL
+:: Step 6: 设置用户输入 KNOWLEDGE_GRAPH_MODEL
+set /p KNOWLEDGE_GRAPH_MODEL="请输入 LLM KNOWLEDGE GRAPH 模型 (输入 skip 跳过): "
+if "%KNOWLEDGE_GRAPH_MODEL%"=="skip" (
+    echo 已跳过设置 KNOWLEDGE_GRAPH_MODEL
+) else (
+    echo 正在更新 KNOWLEDGE_GRAPH_MODEL 环境变量...
+    findstr /v "KNOWLEDGE_GRAPH_MODEL=" .env > .env.tmp
+    echo KNOWLEDGE_GRAPH_MODEL=%KNOWLEDGE_GRAPH_MODEL% >> .env.tmp
+    move /Y .env.tmp .env
+    echo 已完成设置 KNOWLEDGE_GRAPH_MODEL ，设置为：%KNOWLEDGE_GRAPH_MODEL%
+)
+
+:: Step 7: 设置用户输入 EMBEDDING_MODEL
 set /p EMBEDDING_MODEL="请输入嵌入模型 (输入 skip 跳过): "
 if "%EMBEDDING_MODEL%"=="skip" (
     echo 已跳过设置 EMBEDDING_MODEL
@@ -80,7 +92,7 @@ if "%EMBEDDING_MODEL%"=="skip" (
     echo 已完成设置 EMBEDDING_MODEL ，设置为：%EMBEDDING_MODEL%
 )
 
-:: Step 7: 设置用户输入 EMBEDDING_MAX_TOKEN_SIZE
+:: Step 8: 设置用户输入 EMBEDDING_MAX_TOKEN_SIZE
 set /p EMBEDDING_MAX_TOKEN_SIZE="请输入嵌入模型最大tokens长度 (默认 2046，输入 skip 跳过): "
 if "%EMBEDDING_MAX_TOKEN_SIZE%"=="skip" (
     echo 已跳过设置 EMBEDDING_MAX_TOKEN_SIZE
@@ -93,7 +105,7 @@ if "%EMBEDDING_MAX_TOKEN_SIZE%"=="skip" (
     echo 已完成设置 EMBEDDING_MAX_TOKEN_SIZE ，设置为：%EMBEDDING_MAX_TOKEN_SIZE%
 )
 
-:: Step 8: 设置用户输入 API_port
+:: Step 9: 设置用户输入 API_port
 set /p API_port="请输入端口 (默认 8020，输入 skip 跳过): "
 if "%API_port%"=="skip" (
     echo 已跳过设置 API_port

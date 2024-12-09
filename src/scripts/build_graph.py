@@ -20,8 +20,8 @@ print(f"WORKING_DIR: {WORKING_DIR}")
 file_DIR = os.getenv("file_DIR")
 print(f"file_DIR: {file_DIR}")
 
-LLM_MODEL = os.getenv("LLM_MODEL")
-print(f"LLM_MODEL: {LLM_MODEL}")
+KNOWLEDGE_GRAPH_MODEL = os.getenv("KNOWLEDGE_GRAPH_MODEL")
+print(f"KNOWLEDGE_GRAPH_MODEL: {KNOWLEDGE_GRAPH_MODEL}")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL")
 print(f"EMBEDDING_MODEL: {EMBEDDING_MODEL}")
 EMBEDDING_MAX_TOKEN_SIZE = int(os.getenv("EMBEDDING_MAX_TOKEN_SIZE"))
@@ -34,7 +34,7 @@ if not os.path.exists(WORKING_DIR):
     os.mkdir(WORKING_DIR)
 
 
-async def llm_model_func(prompt, system_prompt=None, history_messages=[], keyword_extraction=False, frontend_model=LLM_MODEL, **kwargs) -> str:
+async def llm_model_func(prompt, system_prompt=None, history_messages=[], keyword_extraction=False, frontend_model=KNOWLEDGE_GRAPH_MODEL, **kwargs) -> str:
     return await openai_complete_if_cache(
         frontend_model,
         prompt,
@@ -73,15 +73,30 @@ async def main():
 
         # Check if file_DIR is a directory
         if os.path.isdir(file_DIR):
+            log_file = os.path.join(file_DIR, "_DO_NOT_REMOVE_processed_files.log")
+            processed_files = set()
+            
+            # Load processed files from log if it exists
+            if os.path.exists(log_file):
+                with open(log_file, "r", encoding="utf-8") as log:
+                    processed_files = set(log.read().splitlines())
+
             # Iterate through all files in the directory
             for filename in os.listdir(file_DIR):
                 file_path = os.path.join(file_DIR, filename)
-                # Check if it's a file (not a directory)
+                # Skip if file was already processed or is the log file
+                if filename in processed_files or filename == "_DO_NOT_REMOVE_processed_files.log":
+                    print(f"Skipping already processed file: {filename}")
+                    continue
+                
                 if os.path.isfile(file_path):
                     try:
                         with open(file_path, "r", encoding="utf-8", errors='ignore') as f:
                             print(f"Processing file: {filename}")
                             await rag.ainsert(f.read())
+                            # Log the processed file
+                            with open(log_file, "a", encoding="utf-8") as log:
+                                log.write(f"{filename}\n")
                     except Exception as e:
                         print(f"Error processing file {filename}: {e}")
         else:
