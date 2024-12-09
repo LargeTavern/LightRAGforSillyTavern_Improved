@@ -163,7 +163,17 @@ PROMPTS[
 ] = """<new_instruction>It appears some entities may have still been missed.  Answer YES | NO if there are still entities that need to be added.</new_instruction>
 """
 
-PROMPTS["fail_response"] = "Sorry, I'm not able to provide an answer to that question."
+PROMPTS["fail_response"] = """# LightRAG for SillyTavern (modified fork)
+## Error Occurred - Processing Failed
+
+This error may be caused by:
+1. Model limitations - the AI model may not be powerful enough to follow instructions properly (causing hallucinations or incorrect outputs)
+2. Network issues
+3. Other errors (check SillyTavern logs)
+
+Try fixing the specific error and retry. Note: This doesn't cost tokens for your final request model - only the keyword extraction model uses tokens.
+
+Need help? Check the [FAQ and Issues on GitHub](https://github.com/LargeTavern/LightRAGforSillyTavern)"""
 
 PROMPTS["rag_response"] = """<instructions>
 You are a helpful assistant responding to questions about data in the tables provided.
