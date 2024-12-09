@@ -163,8 +163,8 @@ PROMPTS[
 ] = """<new_instruction>It appears some entities may have still been missed.  Answer YES | NO if there are still entities that need to be added.</new_instruction>
 """
 
-PROMPTS["fail_response"] = """# LightRAG for SillyTavern (modified fork)
-## Error Occurred - Processing Failed
+PROMPTS["fail_response"] = """### LightRAG for SillyTavern (modified fork)
+#### Error Occurred - Processing Failed
 
 This error may be caused by:
 1. Model limitations - the AI model may not be powerful enough to follow instructions properly (causing hallucinations or incorrect outputs)

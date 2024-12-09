@@ -1,5 +1,7 @@
 # LightRAG for SillyTavern FAQ
 
+[中文](FAQ_zh-CN.md) | English
+
 ## Q1: What is LightRAG?
 LightRAG is a Retrieval-Augmented Generation (RAG) system developed by researchers at the University of Hong Kong. It enhances large language models by integrating graph structures into text indexing and retrieval processes. The system uses a dual-level retrieval approach that combines both low-level (specific entities and relationships) and high-level (broader topics and themes) information discovery, making it more effective at understanding and retrieving complex information compared to traditional RAG systems.
 
