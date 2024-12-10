@@ -16,6 +16,7 @@ Testing conducted by the original creator of LightRAG for SillyTavern indicates 
 - 🔧 Enhanced code optimization and cleanup
 - 📚 Enhanced history message processing
 - 🌐 Translated to English (see the `english-master` branch)
+- 🌊 True streaming support implementation for more natural conversation flow
 
 ## 🔧 Prerequisites
 
