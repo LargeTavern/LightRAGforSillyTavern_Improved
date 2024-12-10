@@ -3,17 +3,20 @@ import time
 import httpx
 import asyncio
 import nest_asyncio
+import inspect
+import json
 import numpy as np
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from lightrag import LightRAG, QueryParam
+from lightrag.lightrag import always_get_an_event_loop
 from lightrag.llm import openai_complete_if_cache, openai_compatible_embedding
 from lightrag.utils import EmbeddingFunc
 
 from src.utils.models import *
-from src.utils.utils import process_messages, append_random_hex_to_list, get_embedding_dim, stream_generator
+from src.utils.utils import process_messages, append_random_hex_to_list, get_embedding_dim
 
 # Apply nest_asyncio and load environment
 nest_asyncio.apply()
@@ -158,21 +161,32 @@ async def chat_completions_endpoint(request: ChatRequest):
             prefill=prefill,
             strategy="current_only"
         )
-
-        if request.stream:
-            return StreamingResponse(
-                stream_generator(rag, processed_message, system_prompt, history_messages, request.model),
-                media_type="text/event-stream"
-            )
         
         result = rag.query(
             processed_message,
             system_prompt=system_prompt,
             history_messages=history_messages,
             frontend_model=request.model,
-            param=QueryParam(mode="local", only_need_context=False)
+            param=QueryParam(mode="local", only_need_context=False, stream=request.stream)
         )
-        
+
+
+        if request.stream:
+            loop = always_get_an_event_loop()
+            if inspect.isasyncgen(result):
+                async def generate():
+                    async for chunk in result:
+                        if isinstance(chunk, dict):
+                            yield f"data: {json.dumps(chunk)}\n\n"
+                        elif chunk:
+                            yield f"data: {json.dumps({'choices': [{'delta': {'content': chunk}}]})}\n\n"
+
+                return StreamingResponse(
+                    loop.run_until_complete(generate().__aiter__()), 
+                    media_type="text/event-stream"
+                )
+            
+
         created_time = int(time.time())
         return ChatCompletionResponse(
             id="completion",
