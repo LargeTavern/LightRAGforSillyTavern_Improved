@@ -203,7 +203,6 @@ PROMPTS["rag_response_if_system_prompt_exists"] = """
 
 PROMPTS["keywords_extraction"] = """<instructions>
 You are a helpful assistant tasked with identifying both high-level and low-level keywords in the user's query.
-Use {language} as output language.
 <goal>
 Given the query, list both high-level and low-level keywords. High-level keywords focus on overarching concepts or themes, while low-level keywords focus on specific entities, details, or concrete terms.
 </goal>
@@ -286,4 +285,30 @@ PROMPTS["naive_rag_response_if_system_prompt_exists"] = """<memories>
 {content_data}
 </documents>
 </memories>
+"""
+
+
+PROMPTS[
+    "similarity_check"
+] = """<instructions>
+Please analyze the similarity between these two prompts:
+
+<prompt_1>
+{original_prompt}
+</prompt_1>
+<prompt_2>
+{cached_prompt}
+</prompt_2>
+
+Please evaluate:
+1. Whether these two prompts are semantically similar
+2. Whether the response to <prompt_2></prompt_2> can be used to answer <prompt_1></prompt_1>
+
+Please provide a similarity score between 0 and 1, where:
+0: Completely unrelated or answer cannot be reused
+1: Identical and answer can be directly reused
+0.5: Partially related and answer needs modification to be used
+
+Return only a number between 0-1, without any additional content.
+</instructions>
 """
