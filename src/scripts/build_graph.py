@@ -57,7 +57,7 @@ async def embedding_func(texts: list[str]) -> np.ndarray:
 
 async def main():
     try:
-        embedding_dimension = await get_embedding_dim()
+        embedding_dimension = await get_embedding_dim(embedding_func)
         print(f"Detected embedding dimension: {embedding_dimension}")
 
         rag = LightRAG(
