@@ -82,6 +82,10 @@ async def main():
                     processed_files = set(log.read().splitlines())
 
             # Iterate through all files in the directory
+            # Create a list to store all texts
+            texts_to_insert = []
+            files_to_log = []
+            
             for filename in os.listdir(file_DIR):
                 file_path = os.path.join(file_DIR, filename)
                 # Skip if file was already processed or is the log file
@@ -93,12 +97,17 @@ async def main():
                     try:
                         with open(file_path, "r", encoding="utf-8", errors='ignore') as f:
                             print(f"Processing file: {filename}")
-                            await rag.ainsert(f.read())
-                            # Log the processed file
-                            with open(log_file, "a", encoding="utf-8") as log:
-                                log.write(f"{filename}\n")
+                            texts_to_insert.append(f.read())
+                            files_to_log.append(filename)
                     except Exception as e:
                         print(f"Error processing file {filename}: {e}")
+            
+            if texts_to_insert:
+                # Batch insert all texts
+                await rag.ainsert(texts_to_insert)
+                # Log all successfully processed files
+                with open(log_file, "a", encoding="utf-8") as log:
+                    log.write("\n".join(files_to_log) + "\n")
         else:
             # If file_DIR is a single file
             with open(file_DIR, "r", encoding="utf-8", errors='ignore') as f:

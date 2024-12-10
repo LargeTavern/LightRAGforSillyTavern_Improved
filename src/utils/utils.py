@@ -5,32 +5,6 @@ from typing import Optional, List, AsyncGenerator
 from lightrag import QueryParam
 
 # Global variables for LLM model management
-async def stream_generator(
-    rag,
-    processed_message: str,
-    system_prompt: Optional[str],
-    history_messages: list[dict],
-    frontend_model
-) -> AsyncGenerator[str, None]:
-    """
-    Generate streaming responses from the RAG query result.
-    """
-    # Perform the rag.query operation
-    result = rag.query(
-            processed_message,
-            system_prompt=system_prompt,
-            history_messages=history_messages,
-            frontend_model=frontend_model,
-            param=QueryParam(mode="local", only_need_context=False)
-        )
-    
-    content_chunks = result.split()
-    for chunk in content_chunks:
-        yield f'data: {{"id": "chunk", "object": "chat.completion.chunk", "choices": [{{"index": 0, "delta": {{"content": "{chunk}"}}}}]}}\n\n'
-        await asyncio.sleep(0.1)
-
-    yield 'data: {"id": "done", "object": "chat.completion.chunk", "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}\n\n'
-
 def process_messages(
     user_message: str,
     system_prompt: Optional[str],
