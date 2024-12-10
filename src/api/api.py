@@ -5,18 +5,21 @@ import asyncio
 import nest_asyncio
 import inspect
 import json
+import logging
 import numpy as np
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from lightrag import LightRAG, QueryParam
-from lightrag.lightrag import always_get_an_event_loop
 from lightrag.llm import openai_complete_if_cache, openai_compatible_embedding
 from lightrag.utils import EmbeddingFunc
 
 from src.utils.models import *
 from src.utils.utils import process_messages, append_random_hex_to_list, get_embedding_dim
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Apply nest_asyncio and load environment
 nest_asyncio.apply()
@@ -172,7 +175,6 @@ async def chat_completions_endpoint(request: ChatRequest):
 
 
         if request.stream:
-            loop = always_get_an_event_loop()
             if inspect.isasyncgen(result):
                 async def generate():
                     async for chunk in result:
@@ -182,10 +184,9 @@ async def chat_completions_endpoint(request: ChatRequest):
                             yield f"data: {json.dumps({'choices': [{'delta': {'content': chunk}}]})}\n\n"
 
                 return StreamingResponse(
-                    loop.run_until_complete(generate().__aiter__()), 
+                    generate(), 
                     media_type="text/event-stream"
                 )
-            
 
         created_time = int(time.time())
         return ChatCompletionResponse(
@@ -208,6 +209,7 @@ async def chat_completions_endpoint(request: ChatRequest):
         )
 
     except Exception as e:
+        logger.error(f"Error in chat completion: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/v1/models")
