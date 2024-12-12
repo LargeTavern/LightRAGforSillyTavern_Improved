@@ -16,7 +16,7 @@ from lightrag.llm import openai_complete_if_cache, openai_compatible_embedding
 from lightrag.utils import EmbeddingFunc
 
 from src.utils.models import *
-from src.utils.utils import process_messages, append_random_hex_to_list, get_embedding_dim
+from src.utils.utils import process_messages, get_embedding_dim
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -45,55 +45,7 @@ app = FastAPI(title="LightRAG API", description="API for RAG operations")
 # LLM and embedding functions
 async def llm_model_func(prompt, system_prompt=None, history_messages=[], keyword_extraction=False, frontend_model=LLM_MODEL, **kwargs):
 
-    if keyword_extraction:
-        history_messages = []
-        lines = prompt.split('\n')
-        last_assistant_idx = -1
-        for i, line in enumerate(lines):
-            if line.startswith('Assistant:'):
-                if i < len(lines) - 1 and lines[i+1].startswith('User:'):
-                    continue
-                last_assistant_idx = i
-        if last_assistant_idx != -1:
-            prompt = '\n'.join(lines[:last_assistant_idx])
-    else:
-        messages = []
-        current_role = None
-        current_content = []
-        
-        lines = prompt.split('\n')
-        for line in lines:
-            if line.startswith('System: '):
-                if current_role:
-                    messages.append({"role": current_role, "content": ' '.join(current_content)})
-                current_role = "system"
-                current_content = [line[8:]]
-            elif line.startswith('User: '):
-                if current_role:
-                    messages.append({"role": current_role, "content": ' '.join(current_content)})
-                current_role = "user"
-                current_content = [line[6:]]
-            elif line.startswith('Assistant: '):
-                if current_role:
-                    messages.append({"role": current_role, "content": ' '.join(current_content)})
-                current_role = "assistant"
-                current_content = [line[11:]]
-            elif line.strip():
-                if current_role:
-                    current_content.append(line.strip())
-
-        if current_role and current_content:
-            messages.append({"role": current_role, "content": ' '.join(current_content)})
-        
-        if len(messages) > len(history_messages):
-            history_messages = messages
-        else:
-            last_user_idx = -1
-            for i, m in enumerate(messages):
-                if m["role"] == "user":
-                    last_user_idx = i
-            if last_user_idx != -1:
-                history_messages.extend(messages[last_user_idx:])
+    if not keyword_extraction:
         prompt = ""
 
     return await openai_complete_if_cache(
@@ -129,48 +81,42 @@ async def chat_completions_endpoint(request: ChatRequest):
         if request.model not in available_models:
             raise HTTPException(status_code=400, detail="Selected model is not available.")
 
-        global LLM_MODEL
-
-        user_message = None
-        for msg in reversed(request.messages):
-            if msg.role == "user":
-                user_message = [msg.content]
-                break
-
-        if not user_message:
-            raise HTTPException(status_code=400, detail="No user message found.")
-
-        appended_message = append_random_hex_to_list(user_message, 8)
-        user_messages = "\n".join(appended_message)
-
         system_prompts = []
         history_messages = []
-        prefill = None
+        # Get only the system prompts from the front of messages
         for msg in request.messages:
             if msg.role == "system":
                 system_prompts.append(msg.content)
-            elif msg.role in ["user", "assistant"]:
-                history_messages.append({"role": msg.role, "content": msg.content})
+            else:
+                break  # Stop once we hit a non-system message
+        
+        # Get remaining messages starting from first non-system message
+        history_messages = [
+            {"role": msg.role, "content": msg.content}
+            for msg in request.messages[len(system_prompts):]
+        ]
 
         system_prompt = "\n".join(system_prompts)
-        if history_messages and history_messages[-1]["role"] == "assistant":
-            prefill = history_messages[-1]["content"]
-            history_messages = history_messages[:-1]
 
         processed_message = process_messages(
-            user_message=user_messages,
-            system_prompt=system_prompt,
             history_messages=history_messages,
-            prefill=prefill,
             strategy="current_only"
         )
         
+        kwargs = {
+            key: getattr(request, key)
+            for key in ['temperature', 'max_tokens', 'top_p', 'frequency_penalty', 
+                   'presence_penalty', 'stop', 'top_k']
+            if hasattr(request, key) and getattr(request, key) is not None
+        }
+
         result = rag.query(
             processed_message,
             system_prompt=system_prompt,
             history_messages=history_messages,
             frontend_model=request.model,
-            param=QueryParam(mode="local", only_need_context=False, stream=request.stream)
+            param=QueryParam(mode="local", only_need_context=False, stream=request.stream),
+            **kwargs
         )
 
 

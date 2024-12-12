@@ -486,11 +486,11 @@ class LightRAG:
             if update_storage:
                 await self._insert_done()
 
-    def query(self, query: str, system_prompt=None, history_messages=[], frontend_model=None, param: QueryParam = QueryParam()):
+    def query(self, query: str, system_prompt=None, history_messages=[], frontend_model=None, param: QueryParam = QueryParam(), **kwargs):
         loop = always_get_an_event_loop()
-        return loop.run_until_complete(self.aquery(query, system_prompt, history_messages, frontend_model, param))
+        return loop.run_until_complete(self.aquery(query, system_prompt, history_messages, frontend_model, param, **kwargs))
 
-    async def aquery(self, query: str, system_prompt=None, history_messages=[], frontend_model=None, param: QueryParam = QueryParam()):
+    async def aquery(self, query: str, system_prompt=None, history_messages=[], frontend_model=None, param: QueryParam = QueryParam(), **kwargs):
         if param.mode in ["local", "global", "hybrid"]:
             response = await kg_query(
                 query,
@@ -503,7 +503,8 @@ class LightRAG:
                 hashing_kv=self.llm_response_cache,
                 system_prompt=system_prompt,
                 history_messages=history_messages,
-                frontend_model=frontend_model
+                frontend_model=frontend_model,
+                **kwargs
             )
         elif param.mode == "naive":
             response = await naive_query(
@@ -515,7 +516,8 @@ class LightRAG:
                 hashing_kv=self.llm_response_cache,
                 system_prompt=system_prompt,
                 history_messages=history_messages,
-                frontend_model=frontend_model
+                frontend_model=frontend_model,
+                **kwargs
             )
         else:
             raise ValueError(f"Unknown mode {param.mode}")
