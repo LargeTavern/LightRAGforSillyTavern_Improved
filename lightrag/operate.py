@@ -460,6 +460,7 @@ async def kg_query(
     system_prompt=None, 
     history_messages=[],
     frontend_model=None,
+    **kwargs
 ) -> str:
     # Handle cache
     use_model_func = global_config["llm_model_func"]
@@ -554,6 +555,7 @@ async def kg_query(
         history_messages=history_messages,
         stream=query_param.stream,
         frontend_model=frontend_model,
+        **kwargs
     )
     if isinstance(response, str) and len(response) > len(sys_prompt):
         response = (
@@ -1063,6 +1065,7 @@ async def naive_query(
     system_prompt=None, 
     history_messages=[],
     frontend_model=None,
+    **kwargs
 ):
     # Handle cache
     use_model_func = global_config["llm_model_func"]
@@ -1118,6 +1121,7 @@ async def naive_query(
         system_prompt=sys_prompt,
         history_messages=history_messages,
         frontend_model=frontend_model,
+        **kwargs
     )
 
     if len(response) > len(sys_prompt):
