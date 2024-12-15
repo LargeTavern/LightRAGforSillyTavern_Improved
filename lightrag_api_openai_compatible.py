@@ -1,23 +1,28 @@
+import asyncio
 import os
 import secrets
+import shutil
 import time
-
-import httpx
-import numpy as np
-import asyncio
-import nest_asyncio
-from dotenv import load_dotenv
-from lightrag import LightRAG, QueryParam
-from lightrag.llm import openai_complete_if_cache, openai_embedding, openai_compatible_complete_if_cache, \
-    openai_compatible_embedding
-from lightrag.utils import EmbeddingFunc
-from fastapi import FastAPI, HTTPException, File, UploadFile, requests
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from datetime import datetime
 from typing import List, Optional, Union
 
-
+import httpx
+import nest_asyncio
+import numpy as np
+import pandas as pd
+import textract
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException, File, UploadFile
+from fastapi.responses import JSONResponse
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+
+from lightrag import LightRAG, QueryParam
+from lightrag.llm import openai_compatible_complete_if_cache, \
+    openai_compatible_embedding
+from lightrag.utils import EmbeddingFunc
+
+from Gradio.graph_visual_with_html import KnowledgeGraphVisualizer as kgHTML
 
 # Apply nest_asyncio to solve event loop issues
 nest_asyncio.apply()
@@ -58,6 +63,7 @@ if not os.path.exists(WORKING_DIR):
 async def llm_model_func(
     prompt, system_prompt=None, history_messages=[], **kwargs
 ) -> str:
+    load_dotenv(override=True)
     return await openai_compatible_complete_if_cache(
         LLM_MODEL,
         prompt,
@@ -73,6 +79,7 @@ async def llm_model_func(
 
 
 async def embedding_func(texts: list[str]) -> np.ndarray:
+    load_dotenv(override=True)
     return await openai_compatible_embedding(
         texts,
         EMBEDDING_MODEL,
@@ -90,16 +97,27 @@ async def get_embedding_dim():
 
 
 # Initialize RAG instance
-rag = LightRAG(
-    working_dir=WORKING_DIR,
-    llm_model_func=llm_model_func,
-    embedding_func=EmbeddingFunc(
-        embedding_dim=asyncio.run(get_embedding_dim()),
-        #embedding_dim=768,
-        max_token_size=EMBEDDING_MAX_TOKEN_SIZE,
-        func=embedding_func,
-    ),
-)
+def get_rag_instance():
+    '''
+    实例化rag方法，想要获取该实例请使用rag = get_rag_instance()语句.
+    '''
+    load_dotenv(override=True)  # 动态加载环境变量
+
+    rag_dir = os.getenv("RAG_DIR")
+    embeding_max_tokens = int(os.getenv("EMBEDDING_MAX_TOKEN_SIZE"))
+    print(f"RAG_DIR is set to: {rag_dir}")
+
+    # 创建 RAG 实例以确保每次都有最新的 RAG_DIR
+    rag = LightRAG(
+        working_dir=rag_dir,
+        llm_model_func=llm_model_func,
+        embedding_func=EmbeddingFunc(
+            embedding_dim=asyncio.run(get_embedding_dim()),
+            max_token_size=embeding_max_tokens,
+            func=embedding_func,
+        ),
+    )
+    return rag
 
 
 # Data models(LightRAG standard)
@@ -162,6 +180,37 @@ class ChatCompletionResponse(BaseModel):
     model: str  # 使用的模型名称
     choices: List[Choice]  # 生成的结果列表
     usage: Optional[Usage]  # 可选，使用统计信息
+
+# 单个文件响应模型（暂时保留）
+class FileResponse(BaseModel):
+    object: str = "file"
+    id: str
+    filename: str
+    purpose: str
+    status: str = "processed"
+
+class ConnectResponse(BaseModel):
+    connective: bool
+
+# 多文件响应模型
+class FilesResponse(BaseModel):
+    object: str = "file"
+    filename: str
+    file_path: str
+    purpose: str
+    status: str = "processed"
+    message: str = "Success"
+
+# 多文件请求模型
+class FilesRequest(BaseModel):
+    files: dict[str, str]  # 文件名 -> 文件路径
+    purpose: str = "knowledge_graph_frontend"
+
+# 支持的文件类型
+SUPPORTED_FILE_TYPES = ["txt", "pdf", "doc", "docx", "ppt", "pptx", "csv"]
+
+# 文件保存路径
+BASE_DIR = "./text"
 
 # 历史消息的处理策略
 def process_messages(
@@ -242,6 +291,8 @@ async def chat_completions_endpoint(request: ChatRequest):
         mode:处理模式，共四种，请查看官方文档以便选择
         only_need_context：在本项目中，即使为true也不影响上下文策略
     """
+    load_dotenv()   #动态加载环境变量
+    rag = get_rag_instance()
     try:
         asyncio.run(get_model_info())
 
@@ -284,7 +335,7 @@ async def chat_completions_endpoint(request: ChatRequest):
             # Skip initial system messages until we find first user/assistant message
             if not start_processing and msg.role in ['user', 'assistant']:
                 start_processing = True
-                
+
             if start_processing:
                 # Skip if it's the last message and it's a user message
                 if i == len(request.messages) - 1 and msg.role == 'user':
@@ -292,7 +343,7 @@ async def chat_completions_endpoint(request: ChatRequest):
                 # Skip if it's the last user message followed by an assistant message (which would be prefill)
                 if msg.role == 'user' and i < len(request.messages) - 1 and request.messages[i + 1].role == 'assistant' and i + 1 == len(request.messages) - 1:
                     continue
-                
+
                 history_messages.append({
                     "role": msg.role,
                     "content": msg.content
@@ -353,7 +404,7 @@ async def chat_completions_endpoint(request: ChatRequest):
                 except asyncio.CancelledError:
                     pass
             LLM_MODEL = original_llm_model
-            
+
             content_chunks = result.split()
             for chunk in content_chunks:
                 yield f'data: {{"id": "chunk", "object": "chat.completion.chunk", "choices": [{{"index": 0, "delta": {{"content": "{chunk}"}}}}]}}\n\n'
@@ -374,7 +425,7 @@ async def chat_completions_endpoint(request: ChatRequest):
                 param=QueryParam(mode="local", only_need_context=False),
                 system_prompt_from_frontend=system_prompt,  # 添加 system_prompt
                 )
-                
+
             # Ensure that LLM_MODEL is reverted back after rag.query completes
             if not update_task.done():
                 update_task.cancel()
@@ -383,7 +434,7 @@ async def chat_completions_endpoint(request: ChatRequest):
                 except asyncio.CancelledError:
                     pass
             LLM_MODEL = original_llm_model
-            
+
             created_time = int(time.time())
             """
             print("\n\n\n")
@@ -414,6 +465,7 @@ async def chat_completions_endpoint(request: ChatRequest):
 
 @app.get("/v1/models")
 async def get_model_info():
+    load_dotenv()  # 动态加载环境变量
     global available_models
     headers = {
         "Authorization": f"Bearer {API_KEY}"
@@ -438,9 +490,137 @@ async def get_model_info():
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
+
+# 单个文件的构造（暂时保留）
+@app.post("/v1/file", response_model=FileResponse)
+async def upload_file_to_build(file: UploadFile = File(...), purpose: str = "knowledge_graph_build"):
+    load_dotenv()  # 动态加载环境变量
+    rag = get_rag_instance()
+    try:
+        # 验证文件类型
+        file_ext = file.filename.split(".")[-1].lower()
+        if file_ext not in SUPPORTED_FILE_TYPES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported file type: {file_ext}. Supported types: {', '.join(SUPPORTED_FILE_TYPES)}",
+            )
+
+        # 创建以文件名和时间命名的子文件夹
+        current_time = datetime.now().strftime("%Y%m%d%H%M%S")
+        folder_name = f"{file.filename.rsplit('.', 1)[0]}_{current_time}"
+        save_dir = os.path.join(BASE_DIR, folder_name)
+        os.makedirs(save_dir, exist_ok=True)
+
+        # 保存文件到子文件夹
+        file_path = os.path.join(save_dir, file.filename)
+        with open(file_path, "wb") as f:
+            shutil.copyfileobj(file.file, f)
+
+        # 读取文件内容（按块读取以处理大型文件）
+        if file_ext == "csv":
+            # 处理 CSV 文件
+            df = pd.read_csv(file_path)
+            content = df.to_string()
+        else:
+            # 使用 textract 提取其他文件内容
+            content = textract.process(file_path).decode("utf-8")
+
+        # 插入内容到 RAG
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, lambda: rag.insert(content))
+
+        # 返回响应
+        return FileResponse(
+            id=folder_name,  # 使用子文件夹名作为 ID
+            filename=file.filename,
+            purpose=purpose,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to process file: {str(e)}")
+
+# 多个文件的构造与插入（目前仅适用于管理前端）
+@app.post("/v1/files", response_model=FilesResponse)
+async def upload_files_to_build_frontend(request: FilesRequest):
+    """
+    接收文件字典，直接从路径读取文件内容。
+    """
+    load_dotenv(override=True)  # 动态加载环境变量
+    rag = get_rag_instance()
+    responses = []  # 存储每个文件的响应
+
+    for file_name, file_path in request.files.items():
+        try:
+            # 验证文件是否存在
+            if not os.path.exists(file_path):
+                responses.append(FilesResponse(
+                    filename=file_name,
+                    file_path=file_path,
+                    purpose=request.purpose,
+                    status="failed",
+                    message="File path does not exist"
+                ))
+                continue
+
+            # 验证文件类型
+            file_ext = file_name.split(".")[-1].lower()
+            if file_ext not in SUPPORTED_FILE_TYPES:
+                responses.append(FilesResponse(
+                    filename=file_name,
+                    file_path=file_path,
+                    purpose=request.purpose,
+                    status="failed",
+                    message=f"Unsupported file type: {file_ext}. Supported types: {', '.join(SUPPORTED_FILE_TYPES)}"
+                ))
+                continue
+
+            # 读取文件内容（按块读取以处理大型文件）
+            if file_ext == "csv":
+                # 处理 CSV 文件
+                df = pd.read_csv(file_path)
+                content = df.to_string()
+            else:
+                # 使用 textract 提取其他文件内容
+                content = textract.process(file_path).decode("utf-8")
+
+            # 插入内容
+            async def async_insert(rag, content):
+                await asyncio.to_thread(rag.insert, content)
+
+            await async_insert(rag, content)
+
+            # 成功响应
+            responses.append(FilesResponse(
+                filename=file_name,
+                file_path=file_path,
+                purpose=request.purpose,
+                status="processed",
+                message="File processed successfully"
+            ))
+        except Exception as e:
+            # 异常处理
+            responses.append(FilesResponse(
+                filename=file_name,
+                file_path=file_path,
+                purpose=request.purpose,
+                status="failed",
+                message=f"Failed to process file: {str(e)}"
+            ))
+    # 完成后自动构建HTML以展示结果
+    visualizer = kgHTML(os.getenv("RAG_DIR") + f"/graph_chunk_entity_relation.graphml")
+    html_file_path = visualizer.generate_graph()
+    # 返回所有文件的响应
+    return JSONResponse(content=[response.dict() for response in responses])
+
+@app.post("/v1/connect",response_model=ConnectResponse)
+async def checkconnection():
+    return ConnectResponse(
+        connective = True
+    )
+
 # LightRAG standard response
 @app.post("/query", response_model=Response)
 async def query_endpoint(request: QueryRequest):
+    rag = get_rag_instance()
     try:
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
@@ -459,6 +639,7 @@ async def query_endpoint(request: QueryRequest):
 @app.post("/insert", response_model=Response)
 async def insert_endpoint(request: InsertRequest):
     try:
+        rag = get_rag_instance()
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, lambda: rag.insert(request.text))
         return Response(status="success", message="Text inserted successfully")
@@ -468,6 +649,7 @@ async def insert_endpoint(request: InsertRequest):
 @app.post("/insert_file", response_model=Response)
 async def insert_file(file: UploadFile = File(...)):
     try:
+        rag = get_rag_instance()
         file_content = await file.read()
         # Read file content
         try:
@@ -533,6 +715,9 @@ async def test_funcs():
 if __name__ == "__main__":
     import uvicorn
 
+    rag = get_rag_instance()
+    # 修改实例变量
+    print(f"Updated RAG_DIR to: {rag.working_dir}")
     #test_funcs()
     #asyncio.run(test_funcs())
 

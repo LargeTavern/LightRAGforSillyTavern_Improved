@@ -1,17 +1,19 @@
 @echo off
-REM ÉèÖÃÇ¶ÈëµÄ Python ½âÊÍÆ÷Â·¾¶
+REM ï¿½ï¿½ï¿½ï¿½Ç¶ï¿½ï¿½ï¿½ Python ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Â·ï¿½ï¿½
 set PYTHON_PATH=.\python\python.exe
 
-REM ¹¹½¨ÖªÊ¶Í¼Æ×
-echo [ÐÅÏ¢] ÕýÔÚÔËÐÐ·þÎñÖÐ...
+REM ï¿½ï¿½ï¿½Ð·ï¿½ï¿½ï¿½
+echo [ï¿½ï¿½Ï¢] ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð·ï¿½ï¿½ï¿½ï¿½ï¿½...
 "%PYTHON_PATH%" ".\lightrag_api_openai_compatible.py"
 if errorlevel 1 (
-    echo [´íÎó] ÔËÐÐ·þÎñÊ§°Ü£¬Çë²é¿´Å×³öµÄ´íÎó²¢½øÐÐÅÅ²é£¬»òÕß¼ì²éÍøÂçÁ¬½Ó¡£
+    echo [ï¿½ï¿½ï¿½ï¿½] ï¿½ï¿½ï¿½Ð·ï¿½ï¿½ï¿½Ê§ï¿½Ü£ï¿½ï¿½ï¿½é¿´ï¿½×³ï¿½ï¿½Ä´ï¿½ï¿½ó²¢½ï¿½ï¿½ï¿½ï¿½Å²é£¬ï¿½ï¿½ï¿½ß¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ó¡ï¿½
     pause
     exit /b
 )
 
-REM ÌáÊ¾Íê³É
-echo [³É¹¦] ÔËÐÐ³É¹¦£¬¿É¿ªÊ¼Á¬½Ó¾Æ¹Ý£¡
-echo [ÌáÊ¾] ÄãµÄ·þÎñ¶Ë¿ÚÎª£¬²é¿´½Ì³ÌÒÔÔÚ¾Æ¹ÝÖÐÌîÈë¸ÃURL
+
+
+
+REM ï¿½ï¿½Ê¾ï¿½ï¿½ï¿½
+echo [ï¿½É¹ï¿½] ï¿½ï¿½ï¿½Ð³É¹ï¿½ï¿½ï¿½ï¿½É¿ï¿½Ê¼Ê¹ï¿½Ã£ï¿½
 pause
