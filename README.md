@@ -32,8 +32,7 @@ This repository hosts the code of LightRAG. The structure of this code is based 
 ### 4.修改好环境变量之后，打开built your Graph.bat以创建图谱
 ### 5.打开Run API.bat以开始API服务，运行后可响应酒馆的请求
 ### 6.视频与文字教程正在锐意制作中，请耐心等待
-### 7.未来我们会逐步完善，目前正在实现上传文件并插入现有知识图谱的功能
-
+### 7.未来我们会逐步完善，目前已写好一个前端并且大部分功能已完成，预计在2025年元旦后发布并进行规模测试
 
 
 ## Contribution
