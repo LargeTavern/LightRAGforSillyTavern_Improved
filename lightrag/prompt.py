@@ -8,7 +8,7 @@ PROMPTS["DEFAULT_RECORD_DELIMITER"] = "##"
 PROMPTS["DEFAULT_COMPLETION_DELIMITER"] = "<|COMPLETE|>"
 PROMPTS["process_tickers"] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
-PROMPTS["DEFAULT_ENTITY_TYPES"] = ["organization", "person", "geo", "event"]
+PROMPTS["DEFAULT_ENTITY_TYPES"] = ["organization", "person", "geo", "event", "category"]
 
 PROMPTS["entity_extraction"] = """<goal>
 Given a text document that is potentially relevant to this activity and a list of <entity_types></entity_types>, identify all entities of those types from <text></text> and all relationships among the identified entities.
@@ -218,7 +218,7 @@ Given the query, list both high-level and low-level keywords. High-level keyword
 <examples>
 <real_data>
 Query: {query}
-<real_data>
+</real_data>
 <!-- The `Output` should be human text, not unicode characters. Keep the same language as `Query`. -->
 [Output:]
 """
@@ -287,7 +287,6 @@ PROMPTS["naive_rag_response_if_system_prompt_exists"] = """<memories>
 </memories>
 """
 
-
 PROMPTS[
     "similarity_check"
 ] = """<instructions>
@@ -300,15 +299,20 @@ Please analyze the similarity between these two prompts:
 {cached_prompt}
 </prompt_2>
 
-Please evaluate:
+Please evaluate the following two points and provide a similarity score between 0 and 1 directly:
 1. Whether these two prompts are semantically similar
 2. Whether the response to <prompt_2></prompt_2> can be used to answer <prompt_1></prompt_1>
-
-Please provide a similarity score between 0 and 1, where:
-0: Completely unrelated or answer cannot be reused
+Similarity score criteria:
+0: Completely unrelated or answer cannot be reused, including but not limited to:
+   - The prompts have different topics
+   - The locations mentioned in the prompts are different
+   - The times mentioned in the prompts are different
+   - The specific individuals mentioned in the prompts are different
+   - The specific events mentioned in the prompts are different
+   - The background information in the prompts is different
+   - The key conditions in the prompts are different
 1: Identical and answer can be directly reused
 0.5: Partially related and answer needs modification to be used
-
 Return only a number between 0-1, without any additional content.
 </instructions>
 """
