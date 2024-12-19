@@ -1,4 +1,3 @@
-
 from pydantic import BaseModel
 from typing import List, Optional, Union
 
@@ -51,3 +50,26 @@ class ChatCompletionResponse(BaseModel):
     model: str
     choices: List[Choice]
     usage: Optional[Usage]
+
+# File related models 
+class FileResponse(BaseModel):
+    object: str = "file"
+    id: str
+    filename: str
+    purpose: str
+    status: str = "processed"
+
+class ConnectResponse(BaseModel):
+    connective: bool
+
+class FilesResponse(BaseModel):
+    object: str = "file"
+    filename: str
+    file_path: str
+    purpose: str
+    status: str = "processed"
+    message: str = "Success"
+
+class FilesRequest(BaseModel):
+    files: dict[str, str]  # 文件名 -> 文件路径
+    purpose: str = "knowledge_graph_frontend"

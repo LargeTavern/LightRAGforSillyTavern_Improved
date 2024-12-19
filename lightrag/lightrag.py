@@ -286,10 +286,12 @@ class LightRAG:
         }
 
     def insert(self, string_or_strings):
+        load_dotenv()
         loop = always_get_an_event_loop()
         return loop.run_until_complete(self.ainsert(string_or_strings))
 
     async def ainsert(self, string_or_strings):
+        load_dotenv()
         update_storage = False
         try:
             if isinstance(string_or_strings, str):
@@ -300,14 +302,17 @@ class LightRAG:
                 for c in string_or_strings
             }
             _add_doc_keys = await self.full_docs.filter_keys(list(new_docs.keys()))
+            existing_doc_keys = {k for k in new_docs.keys() if k not in _add_doc_keys}
             new_docs = {k: v for k, v in new_docs.items() if k in _add_doc_keys}
-            if not len(new_docs):
+
+            if not new_docs and not len(_add_doc_keys):
                 logger.warning("All docs are already in the storage")
-                return
+
             update_storage = True
-            logger.info(f"[New Docs] inserting {len(new_docs)} docs")
+            logger.info(f"[New Docs] inserting {len(new_docs)} docs, reusing {len(existing_doc_keys)} docs")
 
             inserting_chunks = {}
+            reused_chunks = {}
             for doc_key, doc in tqdm_async(
                 new_docs.items(), desc="Chunking documents", unit="doc"
             ):
@@ -323,19 +328,17 @@ class LightRAG:
                         tiktoken_model=self.tiktoken_model_name,
                     )
                 }
-                inserting_chunks.update(chunks)
-            _add_chunk_keys = await self.text_chunks.filter_keys(
-                list(inserting_chunks.keys())
-            )
-            inserting_chunks = {
-                k: v for k, v in inserting_chunks.items() if k in _add_chunk_keys
-            }
-            if not len(inserting_chunks):
-                logger.warning("All chunks are already in the storage")
-                return
-            logger.info(f"[New Chunks] inserting {len(inserting_chunks)} chunks")
 
-            await self.chunks_vdb.upsert(inserting_chunks)
+                chunk_keys = list(chunks.keys())
+                non_existing_chunk_keys = await self.text_chunks.filter_keys(chunk_keys)
+
+                reused_chunks.update({k: chunks[k] for k in chunks.keys() if k not in non_existing_chunk_keys})
+                inserting_chunks.update({k: v for k, v in chunks.items() if k in non_existing_chunk_keys})
+
+            logger.info(f"[New Chunks] inserting {len(inserting_chunks)} chunks, reusing {len(reused_chunks)} chunks")
+
+            if inserting_chunks:
+                await self.chunks_vdb.upsert(inserting_chunks)
 
             logger.info("[Entity Extraction]...")
             maybe_new_kg = await extract_entities(
@@ -347,11 +350,14 @@ class LightRAG:
             )
             if maybe_new_kg is None:
                 logger.warning("No new entities and relationships found")
-                return
-            self.chunk_entity_relation_graph = maybe_new_kg
+            else:
+                self.chunk_entity_relation_graph = maybe_new_kg
 
-            await self.full_docs.upsert(new_docs)
+            if new_docs:
+                await self.full_docs.upsert(new_docs)
+
             await self.text_chunks.upsert(inserting_chunks)
+            await self.text_chunks.upsert(reused_chunks)
         finally:
             if update_storage:
                 await self._insert_done()
