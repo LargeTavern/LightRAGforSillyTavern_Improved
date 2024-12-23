@@ -178,7 +178,7 @@ Need help? Check the [FAQ and Issues on GitHub](https://github.com/LargeTavern/L
 PROMPTS["rag_response"] = """<instructions>
 You are a helpful assistant responding to questions about data in the tables provided.
 <goal>
-Generate a response of <target_response_length_and_format></target_response_length_and_format> that responds to the user's question, summarizing all information in the <data_tables></data_tables> appropriate for the response length and format, and incorporating any relevant general knowledge.
+Generate a response of <target_response_length_and_format></target_response_length_and_format> that responds to the user's prompt, summarizing all information in the <data_tables></data_tables> appropriate for the response length and format, and incorporating any relevant general knowledge.
 If you don't know the answer, just say so. Do not make anything up.
 Do not include information where the supporting evidence for it is not provided.
 </goal>
@@ -264,7 +264,7 @@ PROMPTS["naive_rag_response"] = """
 <instructions>
 You are a helpful assistant responding to questions about <documents></documents>.
 <goal>
-Generate a response of the <target_response_length_and_format></target_response_length_and_format> that responds to the user's question, summarizing all information in the <documents></documents> appropriate for the response length and format, and incorporating any relevant general knowledge.
+Generate a response of the <target_response_length_and_format></target_response_length_and_format> that responds to the user's prompt, summarizing all information in the <documents></documents> appropriate for the response length and format, and incorporating any relevant general knowledge.
 If you don't know the answer, just say so. Do not make anything up.
 Do not include information where the supporting evidence for it is not provided.
 </goal>
